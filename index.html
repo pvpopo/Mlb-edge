@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -248,24 +249,36 @@ async function loadMatchup(idx){
   let apS=apData?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat||null;
   let hpS=hpData?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat||null;
   
-  // Get live feed for lineups + live state
-  let feed=gameLiveData[g.gamePk]||await fetchJ(`${API}/v1.1/game/${g.gamePk}/feed/live`);
+  // Get FRESH live feed (don't use cache - need current box score)
+  let feed=await fetchJ(`${API}/v1.1/game/${g.gamePk}/feed/live`);
   if(feed)gameLiveData[g.gamePk]=feed;
   let box=feed?.liveData?.boxscore;
   let playData=feed?.liveData?.plays;
   let currentBatterId=null;
   if(playData?.currentPlay?.matchup?.batter)currentBatterId=playData.currentPlay.matchup.batter.id;
   
+  // Also fetch dedicated boxscore endpoint for game stats
+  let boxData=await fetchJ(`${API}/game/${g.gamePk}/boxscore`);
+  
   let awayBatters=[],homeBatters=[];
-  if(box){
+  let usedBox=box||boxData;
+  if(usedBox){
     ['away','home'].forEach(side=>{
-      let info=box.teams[side];
+      let info=usedBox.teams[side];
       let order=info.battingOrder||[];
       let arr=order.map(id=>{
         let p=info.players['ID'+id];
-        let gs=p?.stats?.batting||{};
+        // Try multiple paths for game batting stats
+        let gs=p?.stats?.batting||p?.gameStats?.batting||{};
+        // Also check if stats are at top level of player object
+        let h=gs.hits??gs.h??p?.hits;
+        let ab=gs.atBats??gs.ab??p?.atBats;
+        let r=gs.runs??gs.r??p?.runs;
+        let rbi=gs.rbi??p?.rbi;
+        let hr=gs.homeRuns??gs.hr??p?.homeRuns;
+        let bb=gs.baseOnBalls??gs.bb??p?.baseOnBalls;
         return{id,name:p?.person?.fullName||'Unknown',pos:p?.position?.abbreviation||'—',
-          gameH:gs.hits,gameAB:gs.atBats,gameR:gs.runs,gameRBI:gs.rbi,gameHR:gs.homeRuns,gameBB:gs.baseOnBalls};
+          gameH:h,gameAB:ab,gameR:r,gameRBI:rbi,gameHR:hr,gameBB:bb};
       });
       if(side==='away')awayBatters=arr;else homeBatters=arr;
     });
@@ -405,7 +418,7 @@ function renderBatterTable(batters,currentBatterId,showGame){
     html+=`<td class="${wC(b.woba)}">${fmt(b.woba)}</td>`;
     html+=`<td class="${wC(b.bvpWoba)}">${b.bvpAB>=3?fmt(b.bvpWoba):'—'}</td>`;
     if(showGame){
-      html+=`<td>${b.gameH??'—'}</td><td>${b.gameAB??'—'}</td><td>${b.gameR??'—'}</td><td>${b.gameRBI??'—'}</td>`;
+      html+=`<td>${b.gameH!=null?b.gameH:'—'}</td><td>${b.gameAB!=null?b.gameAB:'—'}</td><td>${b.gameR!=null?b.gameR:'—'}</td><td>${b.gameRBI!=null?b.gameRBI:'—'}</td>`;
     }
     html+=`</tr>`;
   });
@@ -426,5 +439,6 @@ function backToList(){view='list';renderList()}
 updateDateLabel();
 loadSchedule();
 </script>
+
 </body>
 </html>
