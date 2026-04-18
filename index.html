@@ -10,313 +10,376 @@
 <title>MLB Edge</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#09090b;--s1:#111113;--s2:#1a1a1d;--bdr:#27272a;--t1:#fafafa;--t2:#a1a1aa;--t3:#52525b;--t4:#3f3f46;--amb:#f59e0b;--amb2:rgba(245,158,11,.12);--grn:#34d399;--red:#f87171;--sky:#38bdf8;--lime:#a3e635;--gold:#fbbf24;--mono:'SF Mono','Menlo',monospace}
-body{background:var(--bg);color:var(--t1);font-family:-apple-system,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;padding:env(safe-area-inset-top) 12px 80px}
-.hdr{display:flex;align-items:center;gap:8px;padding-top:8px;margin-bottom:2px}
-.dot{width:6px;height:6px;border-radius:50%;background:var(--amb)}
-.dot.live{animation:pu 1.5s infinite}
-@keyframes pu{0%,100%{opacity:1}50%{opacity:.3}}
-h1{font-size:15px;font-weight:700}
-.sub{font-size:9px;color:var(--t3);letter-spacing:1.5px;margin-bottom:10px}
-button{-webkit-tap-highlight-color:transparent;cursor:pointer}
-.nb{background:var(--s1);border:1px solid var(--bdr);color:var(--t2);border-radius:8px;padding:6px 12px;font-size:12px}
-.nb:active{background:var(--s2)}
-.nv{display:flex;gap:4px;margin-bottom:10px}
-.nv .m{flex:1;text-align:center;font-size:11px;display:flex;align-items:center;justify-content:center;color:var(--t2)}
-.fl{display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap}
-.fb{background:var(--s1);border:1px solid var(--bdr);color:var(--t3);border-radius:6px;padding:4px 10px;font-size:10px;letter-spacing:.5px}
-.fb.on{background:var(--amb2);color:var(--amb);border-color:rgba(245,158,11,.25)}
-/* Cards */
-.gc{display:block;width:100%;text-align:left;background:var(--s1);border:1px solid var(--bdr);border-radius:10px;padding:10px;margin-bottom:6px}
-.gc:active{background:var(--s2)}
-.gc.lv{border-color:rgba(163,230,53,.25)}
+body{background:#09090b;color:#fafafa;font-family:-apple-system,sans-serif;padding:12px 12px 80px}
+button{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.hdr{display:flex;align-items:center;gap:8px;padding-top:env(safe-area-inset-top);margin-bottom:4px}
+.hdr h1{font-size:15px;font-weight:700}
+.hdr .ref{margin-left:auto;background:#111;border:1px solid #27272a;color:#a1a1aa;border-radius:8px;padding:6px 12px;font-size:10px}
+.sub{font-size:9px;color:#52525b;letter-spacing:1.5px;margin-bottom:10px}
+.nav{display:flex;gap:4px;margin-bottom:10px}
+.nav button{background:#111;border:1px solid #27272a;color:#a1a1aa;border-radius:8px;padding:6px 14px;font-size:13px}
+.nav .mid{flex:1;text-align:center;display:flex;flex-direction:column;justify-content:center;font-size:11px;color:#a1a1aa}
+.nav .mid b{color:#fafafa;font-size:12px}
+
+/* Game cards */
+.card{display:block;width:100%;text-align:left;background:#111;border:1px solid #27272a;border-radius:10px;padding:10px;margin-bottom:6px}
+.card:active{background:#1a1a1d}
+.card.live{border-color:rgba(163,230,53,.3)}
 .badge{display:inline-block;font-size:8px;font-weight:700;padding:2px 5px;border-radius:4px;letter-spacing:.8px;margin-left:6px}
-.badge-l{background:rgba(163,230,53,.15);color:var(--lime)}
-.badge-f{background:rgba(113,113,122,.15);color:var(--t3)}
-.sbox{display:flex;justify-content:space-between;align-items:center;background:var(--s2);border-radius:6px;padding:6px 8px;margin-top:6px}
-.sbox .sn{font-size:16px;font-weight:800;font-family:var(--mono)}
-.sbox .sn.w{color:var(--grn)}
-/* Detail */
-.mh{background:var(--s1);border:1px solid var(--bdr);border-radius:10px;padding:10px;text-align:center;margin-bottom:8px}
-.hud{background:var(--s1);border:1px solid var(--bdr);border-radius:10px;padding:12px;margin-bottom:10px}
-.bases{position:relative;width:56px;height:56px;margin:0 auto}
-.b{position:absolute;width:13px;height:13px;transform:rotate(45deg);border:1.5px solid var(--t4);border-radius:2px}
-.b.on{background:var(--gold);border-color:var(--gold)}
-.b1{right:1px;top:50%;margin-top:-6px}.b2{left:50%;top:1px;margin-left:-6px}.b3{left:1px;top:50%;margin-top:-6px}
-.cd{display:flex;gap:3px;align-items:center;margin-bottom:3px}
-.cl{font-size:8px;color:var(--t3);width:10px;letter-spacing:.5px}
-.c{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--t4)}
-.c.bg{background:#22c55e;border-color:#22c55e}
-.c.sr{background:var(--red);border-color:var(--red)}
-.c.og{background:var(--gold);border-color:var(--gold)}
-.lp{background:rgba(163,230,53,.06);border:1px solid rgba(163,230,53,.12);border-radius:8px;padding:8px;margin-bottom:10px;font-size:10px;color:var(--t2);line-height:1.5}
-.lp b{color:var(--lime);font-size:9px;letter-spacing:1px}
-.eb{background:var(--amb2);border:1px solid rgba(245,158,11,.15);border-radius:8px;padding:8px;margin-bottom:10px;font-size:10px;color:rgba(245,158,11,.85);line-height:1.5}
-.eb b{color:var(--amb);font-size:9px;letter-spacing:1px}
-.ls{overflow-x:auto;margin-bottom:10px}
-.ls table{width:100%;border-collapse:collapse;font-size:10px;font-family:var(--mono);min-width:300px}
-.ls th{padding:3px;text-align:center;color:var(--t3);font-weight:400;border-bottom:1px solid var(--bdr);font-size:9px}
-.ls th:first-child{text-align:left;width:32px}
-.ls td{padding:3px;text-align:center;color:var(--t2);border-bottom:1px solid rgba(39,39,42,.3)}
-.ls td:first-child{text-align:left;font-weight:600;color:var(--t1);font-family:-apple-system,sans-serif}
-.ls .rh{font-weight:700;color:var(--t1)}.ls .ci{color:var(--lime);font-weight:700}
-.pc{background:var(--s1);border:1px solid var(--bdr);border-radius:10px;padding:10px;margin-bottom:6px}
-.pc .lb{font-size:9px;color:var(--amb);letter-spacing:1px;margin-bottom:4px}
+.blv{background:rgba(163,230,53,.15);color:#a3e635}
+.bfn{background:rgba(113,113,122,.15);color:#52525b}
+.scorebar{display:flex;justify-content:space-between;align-items:center;background:#1a1a1d;border-radius:6px;padding:6px 8px;margin-top:6px}
+.scorebar .num{font-size:16px;font-weight:800;font-family:‘SF Mono’,monospace}
+.scorebar .num.w{color:#34d399}
+
+/* Matchup detail */
+.mhdr{background:#111;border:1px solid #27272a;border-radius:10px;padding:10px;text-align:center;margin-bottom:8px}
+.edge{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.15);border-radius:8px;padding:8px;margin-bottom:10px;font-size:10px;color:rgba(245,158,11,.85);line-height:1.5}
+.edge b{color:#f59e0b;font-size:9px;letter-spacing:1px}
+.pcard{background:#111;border:1px solid #27272a;border-radius:10px;padding:10px;margin-bottom:6px}
+.pcard .lab{font-size:9px;color:#f59e0b;letter-spacing:1.2px;margin-bottom:4px}
+
+/* Batter table */
 table.bt{width:100%;border-collapse:collapse;font-size:10px}
-table.bt th{text-align:right;padding:3px 2px;font-weight:400;color:var(--t3);border-bottom:1px solid var(--bdr)}
-table.bt th:first-child,table.bt th:nth-child(2){text-align:left}
-table.bt td{padding:4px 2px;border-bottom:1px solid rgba(39,39,42,.4);font-family:var(--mono);text-align:right;font-size:10px}
-table.bt td:first-child{text-align:left;color:var(--t4);font-size:9px;width:14px}
-table.bt td:nth-child(2){text-align:left;color:var(--t1);font-family:-apple-system,sans-serif;font-weight:500;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-table.bt td:nth-child(3){text-align:center;color:var(--t3);font-family:-apple-system,sans-serif}
-table.bt tr.ab{background:rgba(251,191,36,.1);border-left:2px solid var(--gold)}
-table.bt tr.ab td:nth-child(2){color:var(--gold);font-weight:700}
-table.bt tr.du{background:rgba(56,189,248,.06);border-left:2px solid rgba(56,189,248,.4)}
-table.bt tr.du td:nth-child(2){color:var(--sky)}
-.ta{font-size:9px;color:var(--t3);margin-top:4px;padding-left:2px}
-.grn{color:var(--grn)}.red{color:var(--red)}.sky{color:var(--sky)}.amb{color:var(--amb);font-weight:600}.t2c{color:var(--t2)}
-.leg{background:rgba(17,17,19,.6);border:1px solid rgba(39,39,42,.4);border-radius:8px;padding:8px;margin-top:14px;font-size:9px;color:var(--t3);line-height:1.6}
-.ld{text-align:center;padding:50px 0;color:var(--t3);font-size:11px}
-.sp{display:inline-block;width:18px;height:18px;border:2px solid var(--t4);border-top-color:var(--amb);border-radius:50%;animation:s .6s linear infinite;margin-bottom:8px}
+table.bt th{text-align:right;padding:3px 2px;font-weight:400;color:#52525b;border-bottom:1px solid #27272a}
+table.bt th:nth-child(1),table.bt th:nth-child(2){text-align:left}
+table.bt td{padding:4px 2px;border-bottom:1px solid rgba(39,39,42,.4);font-family:‘SF Mono’,monospace;text-align:right;font-size:10px}
+table.bt td:nth-child(1){text-align:left;color:#3f3f46;font-size:9px;width:14px}
+table.bt td:nth-child(2){text-align:left;color:#fafafa;font-family:-apple-system,sans-serif;font-weight:500;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+table.bt td:nth-child(3){text-align:center;color:#52525b;font-family:-apple-system,sans-serif}
+table.bt tr.ab{background:rgba(251,191,36,.1);border-left:2px solid #fbbf24}
+table.bt tr.ab td:nth-child(2){color:#fbbf24;font-weight:700}
+
+.grn{color:#34d399}.red{color:#f87171}.amb{color:#f59e0b;font-weight:600}.sky{color:#38bdf8}.t2{color:#a1a1aa}
+.divider{border:none;border-top:1px solid #27272a;margin:14px 0}
+.leg{background:rgba(17,17,19,.6);border:1px solid rgba(39,39,42,.4);border-radius:8px;padding:8px;margin-top:14px;font-size:9px;color:#52525b;line-height:1.6}
+.loader{text-align:center;padding:50px 0;color:#52525b;font-size:11px}
+.spin{display:inline-block;width:18px;height:18px;border:2px solid #3f3f46;border-top-color:#f59e0b;border-radius:50%;animation:s .6s linear infinite;margin-bottom:8px}
 @keyframes s{to{transform:rotate(360deg)}}
-.dv{border:none;border-top:1px solid var(--bdr);margin:14px 0}
-.rb{background:var(--s1);border:1px solid var(--bdr);color:var(--t2);border-radius:8px;padding:6px 12px;font-size:10px;margin-left:auto}
+.err{text-align:center;padding:30px;color:#f87171;font-size:11px}
+.err button{margin-top:10px;background:#111;border:1px solid #27272a;color:#a1a1aa;border-radius:8px;padding:8px 20px;font-size:11px}
 </style>
+
 </head>
 <body>
-<div class="hdr"><div class="dot" id="ld"></div><h1>MLB Edge</h1><button class="rb" onclick="init()">↻</button></div>
+<div class="hdr"><h1>⚾ MLB Edge</h1><button class="ref" onclick="load()">↻ Refresh</button></div>
 <div class="sub" id="sub">LOADING...</div>
 <div id="nav"></div>
 <div id="app"></div>
+
 <script>
-const API='https://statsapi.mlb.com/api/v1';
-let dt=new Date().toISOString().slice(0,10),gms=[],sel=null,vw='list',fl='ALL';
+const BASE = 'https://statsapi.mlb.com';
+let date = new Date().toISOString().slice(0,10);
+let games = [];
+let sel = null; // selected game index
+let mode = 'list'; // 'list' or 'detail'
 
-async function f(u){try{let r=await fetch(u);return r.ok?r.json():null}catch{return null}}
-function fmt(v,d=3){return v==null||isNaN(+v)?’—’:(+v).toFixed(d)}
-function wC(w){if(w==null)return’t2c’;let n=+w;return n>.37?‘amb’:n>.34?‘grn’:n<.26?‘sky’:n<.30?‘red’:‘t2c’}
-function eC(v){if(v==null)return’t2c’;let n=+v;return n<3.5?‘grn’:n>4.5?‘red’:‘t2c’}
-function cW(s){if(!s)return null;let h=(s.hits||0),d2=(s.doubles||0),t=(s.triples||0),hr=(s.homeRuns||0),si=h-d2-t-hr;
-let n=.69*((s.baseOnBalls||0)-(s.intentionalWalks||0))+.72*(s.hitByPitch||0)+.88*si+1.24*d2+1.57*t+2.01*hr;
-let d=(s.atBats||0)+(s.baseOnBalls||0)-(s.intentionalWalks||0)+(s.sacFlies||0)+(s.hitByPitch||0);return d>0?n/d:null}
-function cF(s){if(!s)return null;let ip=parseFloat(s.inningsPitched||0);return ip?((13*(s.homeRuns||0)+3*((s.baseOnBalls||0)+(s.hitByPitch||0))-2*(s.strikeOuts||0))/ip+3.1):null}
-function pd(d){return new Date(d+‘T12:00:00’).toLocaleDateString(‘en-US’,{weekday:‘short’,month:‘short’,day:‘numeric’})}
+// --- Helpers ---
+function $(id) { return document.getElementById(id); }
+function fmt(v, d) { return v == null || isNaN(+v) ? '—' : (+v).toFixed(d || 3); }
+function wColor(w) { if (w == null) return 't2'; let n = +w; return n > .37 ? 'amb' : n > .34 ? 'grn' : n < .26 ? 'sky' : n < .30 ? 'red' : 't2'; }
+function eColor(v) { if (v == null) return 't2'; let n = +v; return n < 3.5 ? 'grn' : n > 4.5 ? 'red' : 't2'; }
+function prettyDate() { return new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); }
 
-function nav(){
-if(vw===‘list’)$(‘nav’).innerHTML=`<div class="nv"><button class="nb" onclick="sd(-1)">←</button><div class="m">${pd(dt)}</div><button class="nb" onclick="sd(1)">→</button></div>`;
-else{let g=gms[sel];$(‘nav’).innerHTML=`<div class="nv"><button class="nb" onclick="pg()">←</button><div class="m" style="flex-direction:column"><strong>${g.teams.away.team.abbreviation} @ ${g.teams.home.team.abbreviation}</strong><span style="font-size:9px;color:var(--t3)">${sel+1}/${gms.length} · ${pd(dt)}</span></div><button class="nb" onclick="ng()">→</button></div>`}
+function calcWOBA(s) {
+  if (!s) return null;
+  let si = (s.hits||0) - (s.doubles||0) - (s.triples||0) - (s.homeRuns||0);
+  let num = .69*((s.baseOnBalls||0)-(s.intentionalWalks||0)) + .72*(s.hitByPitch||0) + .88*si + 1.24*(s.doubles||0) + 1.57*(s.triples||0) + 2.01*(s.homeRuns||0);
+  let den = (s.atBats||0) + (s.baseOnBalls||0) - (s.intentionalWalks||0) + (s.sacFlies||0) + (s.hitByPitch||0);
+  return den > 0 ? num / den : null;
 }
-function sd(d){let x=new Date(dt+‘T12:00:00’);x.setDate(x.getDate()+d);dt=x.toISOString().slice(0,10);init()}
-async function ng(){if(sel<gms.length-1)lm(sel+1);else{sd(1);let d=await f(`${API}/schedule?sportId=1&date=${dt}&hydrate=linescore,team`);if(d?.dates?.[0]){gms=d.dates[0].games.sort((a,b)=>new Date(a.gameDate)-new Date(b.gameDate));lm(0)}}}
-async function pg(){if(sel>0)lm(sel-1);else{sd(-1);let d=await f(`${API}/schedule?sportId=1&date=${dt}&hydrate=linescore,team`);if(d?.dates?.[0]){gms=d.dates[0].games.sort((a,b)=>new Date(a.gameDate)-new Date(b.gameDate));lm(gms.length-1)}}}
-
-async function init(){
-vw=‘list’;sel=null;fl=‘ALL’;nav();
-$(‘sub’).textContent=‘LOADING…’;$(‘app’).innerHTML=’<div class="ld"><div class="sp"></div><br>Fetching games…</div>’;
-let d=await f(`${API}/schedule?sportId=1&date=${dt}&hydrate=probablePitcher,linescore,team`);
-if(!d?.dates?.[0]){$(‘app’).innerHTML=’<p style="text-align:center;color:var(--t3);padding:40px">No games</p>’;$(‘sub’).textContent=‘NO GAMES’;nav();return}
-gms=d.dates[0].games.sort((a,b)=>new Date(a.gameDate)-new Date(b.gameDate));
-let live=gms.some(g=>g.status?.abstractGameState===‘Live’);
-$(‘ld’).className=live?‘dot live’:‘dot’;
-$(‘sub’).textContent=`${gms.length} GAMES${live?' · LIVE':''}`;
-nav();rl();
+function calcFIP(s) {
+  if (!s) return null;
+  let ip = parseFloat(s.inningsPitched || 0);
+  if (!ip) return null;
+  return (13*(s.homeRuns||0) + 3*((s.baseOnBalls||0)+(s.hitByPitch||0)) - 2*(s.strikeOuts||0)) / ip + 3.10;
 }
 
-function rl(){
-let gs=fl===‘ALL’?gms:gms.filter(g=>{let h=new Date(g.gameDate).getHours();return fl===‘EARLY’?h<16:fl===‘MID’?h>=16&&h<20:h>=20});
-let tags=[…new Set(gms.map(g=>{let h=new Date(g.gameDate).getHours();return h<16?‘EARLY’:h<20?‘MID’:‘LATE’}))];
-let h=’<div class="fl">’;h+=`<button class="fb ${fl==='ALL'?'on':''}" onclick="fl='ALL';rl()">ALL</button>`;
-tags.forEach(t=>h+=`<button class="fb ${fl===t?'on':''}" onclick="fl='${t}';rl()">${t}</button>`);h+=’</div>’;
-gs.forEach(g=>{
-let i=gms.indexOf(g),a=g.teams.away,hm=g.teams.home,ap=a.probablePitcher,hp=hm.probablePitcher;
-let tm=new Date(g.gameDate).toLocaleTimeString(‘en-US’,{hour:‘numeric’,minute:‘2-digit’});
-let st=g.status?.abstractGameState||’’,isL=st===‘Live’,isF=st===‘Final’,ls=g.linescore;
-h+=`<button class="gc ${isL?'lv':''}" onclick="lm(${i})">`;
-h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px"><div style="font-size:12px;font-weight:700">${a.team.abbreviation}<span style="color:var(--t4);margin:0 4px">@</span>${hm.team.abbreviation}`;
-if(isL)h+=`<span class="badge badge-l">${ls?.isTopInning?'▲':'▼'} ${ls?.currentInningOrdinal||''}</span>`;
-else if(isF)h+=`<span class="badge badge-f">FINAL</span>`;
-h+=`</div><span style="font-size:9px;color:var(--t3)">${tm}</span></div>`;
-h+=`<div style="font-size:9px;color:var(--t2)">${ap?ap.fullName:'TBD'} vs ${hp?hp.fullName:'TBD'}</div>`;
-if(ls&&(isL||isF)){let aR=ls.teams?.away?.runs??0,hR=ls.teams?.home?.runs??0;
-h+=`<div class="sbox"><span style="font-size:11px;font-weight:600">${a.team.abbreviation}</span><span class="sn ${isF&&aR>hR?'w':''}">${aR}</span><span style="font-size:9px;color:${isL?'var(--lime)':'var(--t3)'}">${isL?((ls.isTopInning?'▲':'▼')+' '+(ls.currentInningOrdinal||'')):g.status.detailedState}</span><span class="sn ${isF&&hR>aR?'w':''}">${hR}</span><span style="font-size:11px;font-weight:600">${hm.team.abbreviation}</span></div>`}
-h+=`</button>`});
-$(‘app’).innerHTML=h;
+async function api(path) {
+  try {
+    let r = await fetch(BASE + path);
+    if (!r.ok) throw new Error(r.status);
+    return await r.json();
+  } catch(e) {
+    console.error('API error:', path, e);
+    return null;
+  }
 }
 
-async function lm(i){
-vw=‘detail’;sel=i;nav();
-let g=gms[i],aw=g.teams.away,hm=g.teams.home,st=g.status?.abstractGameState||’’,isL=st===‘Live’,isF=st===‘Final’;
-$(‘app’).innerHTML=’<div class="ld"><div class="sp"></div><br>Loading…</div>’;
-
-// 3 API calls max: live feed + 2 pitcher stats
-let ap=aw.probablePitcher,hp=hm.probablePitcher;
-let [feed,apD,hpD]=await Promise.all([
-f(`${API}/v1.1/game/${g.gamePk}/feed/live`),
-ap?f(`${API}/people/${ap.id}?hydrate=stats(group=[pitching],type=[season],season=2026)`):null,
-hp?f(`${API}/people/${hp.id}?hydrate=stats(group=[pitching],type=[season],season=2026)`):null
-]);
-let aS=apD?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat||null;
-let hS=hpD?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat||null;
-let box=feed?.liveData?.boxscore;
-let plays=feed?.liveData?.plays;
-let lsd=feed?.liveData?.linescore;
-let ls=g.linescore;
-
-// Current play info
-let curBat=plays?.currentPlay?.matchup?.batter?.id||null;
-let curPit=plays?.currentPlay?.matchup?.pitcher||null;
-let cnt=plays?.currentPlay?.count||{};
-let r1=!!lsd?.offense?.first,r2=!!lsd?.offense?.second,r3=!!lsd?.offense?.third;
-let lastPlay=null;
-let ap2=plays?.allPlays||[];
-for(let j=ap2.length-1;j>=0;j–){if(ap2[j]?.result?.description){lastPlay=ap2[j].result.description;break}}
-
-// Current pitcher season stats
-let cpS=null;
-if(curPit){let cpD=await f(`${API}/people/${curPit.id}?hydrate=stats(group=[pitching],type=[season],season=2026)`);cpS=cpD?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat||null}
-
-// Extract batters from boxscore with ALL available stats
-function extractBatters(side){
-if(!box)return[];
-let info=box.teams[side];if(!info)return[];
-let ord=info.battingOrder||[];
-return ord.map(id=>{
-let p=info.players[‘ID’+id];if(!p)return null;
-// Game stats - try multiple paths
-let gs=p.stats?.batting||{};
-// Season stats - try multiple paths
-let ss=p.seasonStats?.batting||null;
-// Compute wOBA from season stats if available
-let woba=cW(ss);
-// If no seasonStats, try to get avg/ops from gameStats or player level
-let avg=ss?.avg||p.battingAvg||null;
-let ops=ss?.ops||null;
-let obp=ss?.obp||null;
-let slg=ss?.slg||null;
-// If still no woba but have obp+slg, estimate
-if(woba==null&&obp&&slg){woba=(parseFloat(obp)*1.7+parseFloat(slg)*0.7)/2.4*1.15}
-return{id,name:p.person?.fullName||’?’,pos:p.position?.abbreviation||’—’,
-avg,ops,woba,
-gH:gs.hits,gAB:gs.atBats,gR:gs.runs,gRBI:gs.rbi,gHR:gs.homeRuns};
-}).filter(Boolean);
-}
-let eA=extractBatters(‘away’),eH=extractBatters(‘home’);
-
-// Fallback: roster if no lineup
-if(!eA.length){let r=await f(`${API}/teams/${aw.team.id}/roster?rosterType=active`);if(r?.roster)eA=r.roster.filter(p=>[‘Hitter’,‘Outfielder’,‘Infielder’,‘Catcher’].includes(p.position?.type)).slice(0,9).map(p=>({id:p.person.id,name:p.person.fullName,pos:p.position.abbreviation,avg:null,ops:null,woba:null,gH:null,gAB:null,gR:null,gRBI:null,gHR:null}))}
-if(!eH.length){let r=await f(`${API}/teams/${hm.team.id}/roster?rosterType=active`);if(r?.roster)eH=r.roster.filter(p=>[‘Hitter’,‘Outfielder’,‘Infielder’,‘Catcher’].includes(p.position?.type)).slice(0,9).map(p=>({id:p.person.id,name:p.person.fullName,pos:p.position.abbreviation,avg:null,ops:null,woba:null,gH:null,gAB:null,gR:null,gRBI:null,gHR:null}))}
-
-// Due up
-let isTop=lsd?.isTopInning;
-let batSide=isTop?‘away’:‘home’;
-let batOrd=batSide===‘away’?eA:eH;
-let dueUp=new Set();
-if(curBat&&batOrd.length){let ci=batOrd.findIndex(b=>b.id==curBat);if(ci>=0)for(let j=1;j<=3;j++)dueUp.add(batOrd[(ci+j)%batOrd.length].id)}
-
-// Edge notes
-let aW=aw.leagueRecord?.wins||0,aL=aw.leagueRecord?.losses||0,hW=hm.leagueRecord?.wins||0,hL=hm.leagueRecord?.losses||0;
-let edge=[];
-let aP=aW/(aW+aL||1),hP=hW/(hW+hL||1);
-if(aP>.6)edge.push(`${aw.team.abbreviation} hot at ${aW}-${aL}.`);else if(aP<.4)edge.push(`${aw.team.abbreviation} struggling at ${aW}-${aL}.`);
-if(hP>.6)edge.push(`${hm.team.abbreviation} strong at ${hW}-${hL}.`);else if(hP<.4)edge.push(`${hm.team.abbreviation} cold at ${hW}-${hL}.`);
-let aE=aS?+aS.era:null,hE=hS?+hS.era:null;
-if(aE!=null&&hE!=null&&Math.abs(aE-hE)>1.5)edge.push(`Pitching edge ${aE<hE?aw.team.abbreviation:hm.team.abbreviation} — ${Math.min(aE,hE).toFixed(2)} vs ${Math.max(aE,hE).toFixed(2)} ERA.`);
-if(aE!=null&&aE<2.5)edge.push(`${ap?.fullName} dominant (${aE.toFixed(2)} ERA).`);
-if(hE!=null&&hE<2.5)edge.push(`${hp?.fullName} dominant (${hE.toFixed(2)} ERA).`);
-if(aE!=null&&aE>5)edge.push(`${ap?.fullName} hittable (${aE.toFixed(2)}) — value on ${hm.team.abbreviation}.`);
-if(hE!=null&&hE>5)edge.push(`${hp?.fullName} hittable (${hE.toFixed(2)}) — value on ${aw.team.abbreviation}.`);
-edge.push(`${hm.team.abbreviation} bats last at home.`);
-edge=edge.slice(0,5).join(’ ’);
-
-// === RENDER ===
-let h=’’;
-
-// Score header
-h+=`<div class="mh"><div style="font-size:16px;font-weight:700">${aw.team.abbreviation} <span style="color:var(--t4)">@</span> ${hm.team.abbreviation}`;
-if(isL&&lsd)h+=`<span class="badge badge-l">${lsd.isTopInning?'▲':'▼'} ${lsd.currentInningOrdinal||''}</span>`;
-else if(isF)h+=`<span class="badge badge-f">FINAL</span>`;
-h+=`</div><div style="font-size:9px;color:var(--t3)">(${aW}-${aL}) vs (${hW}-${hL})</div>`;
-if(ls&&(isL||isF)){let aR=ls.teams?.away?.runs??0,hR=ls.teams?.home?.runs??0;
-h+=`<div style="margin-top:6px;font-family:var(--mono);font-size:28px;font-weight:800">${aR}<span style="color:var(--t4);margin:0 8px">-</span>${hR}</div>`}
-h+=`</div>`;
-
-// LIVE HUD
-if(isL&&lsd){
-h+=`<div class="hud"><div style="display:flex;align-items:center;justify-content:space-around;margin-bottom:8px">`;
-// Bases
-h+=`<div class="bases"><div class="b b1 ${r1?'on':''}"></div><div class="b b2 ${r2?'on':''}"></div><div class="b b3 ${r3?'on':''}"></div></div>`;
-// Count
-h+=`<div>`;
-h+=`<div class="cd"><span class="cl">B</span>`;for(let j=0;j<4;j++)h+=`<div class="c ${j<(cnt.balls||0)?'bg':''}"></div>`;h+=`</div>`;
-h+=`<div class="cd"><span class="cl">S</span>`;for(let j=0;j<3;j++)h+=`<div class="c ${j<(cnt.strikes||0)?'sr':''}"></div>`;h+=`</div>`;
-h+=`<div class="cd"><span class="cl">O</span>`;for(let j=0;j<3;j++)h+=`<div class="c ${j<(lsd.outs||0)?'og':''}"></div>`;h+=`</div>`;
-h+=`</div></div>`;
-// Pitcher vs Batter
-h+=`<div style="display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid var(--bdr)">`;
-h+=`<div><div style="font-size:8px;color:var(--t3);letter-spacing:1px">PITCHING</div><div style="font-size:13px;font-weight:700">${curPit?.fullName||'—'}</div>`;
-if(cpS)h+=`<div style="font-size:9px;color:var(--t3);font-family:var(--mono)">${cpS.era||'—'} ERA · ${cpS.strikeOuts||0} K</div>`;
-h+=`</div><div style="text-align:right"><div style="font-size:8px;color:var(--t3);letter-spacing:1px">AT BAT</div>`;
-let batN=’—’;let allB=[…eA,…eH];let found=allB.find(b=>b.id==curBat);if(found)batN=found.name;
-h+=`<div style="font-size:13px;font-weight:700;color:var(--gold)">${batN}</div></div></div></div>`;
+// --- Navigation ---
+function renderNav() {
+  if (mode === 'list') {
+    $('nav').innerHTML = `<div class="nav"><button class="nav" onclick="shiftDate(-1)">←</button><div class="mid">${prettyDate()}</div><button class="nav" onclick="shiftDate(1)">→</button></div>`;
+  } else {
+    let g = games[sel];
+    let a = g.teams.away.team.abbreviation, h = g.teams.home.team.abbreviation;
+    $('nav').innerHTML = `<div class="nav"><button onclick="prevGame()">←</button><div class="mid"><b>${a} @ ${h}</b><span style="font-size:9px">${sel+1} of ${games.length}</span></div><button onclick="nextGame()">→</button></div>`;
+  }
 }
 
-// Last play
-if(lastPlay&&(isL||isF))h+=`<div class="lp"><b>LAST PLAY </b>${lastPlay}</div>`;
-// Edge
-h+=`<div class="eb"><b>EDGE </b>${edge}</div>`;
-
-// Linescore
-if(lsd?.innings?.length&&(isL||isF)){
-let inn=lsd.innings,ci=lsd.currentInning||inn.length,it=lsd.isTopInning;
-h+=`<div class="ls"><table><thead><tr><th></th>`;inn.forEach((_,j)=>h+=`<th class="${isL&&j+1===ci?'ci':''}">${j+1}</th>`);
-h+=`<th class="rh">R</th><th class="rh">H</th><th class="rh">E</th></tr></thead><tbody>`;
-h+=`<tr><td>${aw.team.abbreviation}</td>`;inn.forEach((n,j)=>h+=`<td class="${isL&&j+1===ci&&it?'ci':''}">${n.away?.runs??'—'}</td>`);
-h+=`<td class="rh">${ls.teams?.away?.runs??0}</td><td class="rh">${ls.teams?.away?.hits??0}</td><td class="rh">${ls.teams?.away?.errors??0}</td></tr>`;
-h+=`<tr><td>${hm.team.abbreviation}</td>`;inn.forEach((n,j)=>h+=`<td class="${isL&&j+1===ci&&!it?'ci':''}">${n.home?.runs??''}</td>`);
-h+=`<td class="rh">${ls.teams?.home?.runs??0}</td><td class="rh">${ls.teams?.home?.hits??0}</td><td class="rh">${ls.teams?.home?.errors??0}</td></tr></tbody></table></div>`;
+function shiftDate(dir) {
+  let d = new Date(date+'T12:00:00');
+  d.setDate(d.getDate() + dir);
+  date = d.toISOString().slice(0,10);
+  load();
 }
 
-// Away team
-h+=`<div style="font-size:12px;font-weight:700;margin-top:4px">${aw.team.name||aw.team.abbreviation}</div>`;
-h+=rPC(ap,aS,aw.team.abbreviation+’ SP’);
-h+=`<div style="font-size:9px;color:var(--t3);margin:4px 0 2px">Batting vs ${hp?.fullName||'TBD'}</div>`;
-h+=rBT(eA,curBat,isL||isF,batSide===‘away’?dueUp:new Set());
-h+=`<hr class="dv">`;
-// Home team
-h+=`<div style="font-size:12px;font-weight:700;margin-top:4px">${hm.team.name||hm.team.abbreviation}</div>`;
-h+=rPC(hp,hS,hm.team.abbreviation+’ SP’);
-h+=`<div style="font-size:9px;color:var(--t3);margin:4px 0 2px">Batting vs ${ap?.fullName||'TBD'}</div>`;
-h+=rBT(eH,curBat,isL||isF,batSide===‘home’?dueUp:new Set());
-
-h+=`<div class="leg"><span style="color:var(--gold)">■</span> at bat <span class="sky">■</span> due up <span class="grn">■</span> elite <span class="red">■</span> cold <span class="amb">■</span> HR<br>Arrows cycle games. wOBA from season stats. Auto-refresh when live.</div>`;
-$(‘app’).innerHTML=h;
+async function nextGame() {
+  if (sel < games.length - 1) { openGame(sel + 1); }
+  else {
+    let d = new Date(date+'T12:00:00'); d.setDate(d.getDate()+1); date = d.toISOString().slice(0,10);
+    await loadGamesQuiet();
+    if (games.length) openGame(0); else { mode = 'list'; renderNav(); $('app').innerHTML = '<p class="err">No games next day</p>'; }
+  }
 }
 
-function rPC(p,s,lab){
-if(!p)return`<div class="pc"><div class="lb">${lab}</div><div style="font-size:14px;color:var(--t3)">TBD</div></div>`;
-let era=s?+s.era:null,fip=cF(s);
-return`<div class="pc"><div class="lb">${lab}</div><div style="display:flex;justify-content:space-between"><div><div style="font-size:14px;font-weight:700">${p.fullName}</div><div style="font-size:9px;color:var(--t3);margin-top:2px">${s?.wins||0}-${s?.losses||0} · ${s?.inningsPitched||0} IP · ${s?.strikeOuts||0} K · ${fmt(+(s?.whip||0),2)} WHIP</div></div><div style="text-align:right"><div style="font-size:9px;color:var(--t3)">ERA / FIP</div><div style="font-size:14px;font-weight:700;font-family:var(--mono)"><span class="${eC(era)}">${fmt(era,2)}</span><span style="color:var(--t4);margin:0 2px">/</span><span class="${eC(fip)}">${fmt(fip,2)}</span></div></div></div></div>`;
+async function prevGame() {
+  if (sel > 0) { openGame(sel - 1); }
+  else {
+    let d = new Date(date+'T12:00:00'); d.setDate(d.getDate()-1); date = d.toISOString().slice(0,10);
+    await loadGamesQuiet();
+    if (games.length) openGame(games.length - 1); else { mode = 'list'; renderNav(); $('app').innerHTML = '<p class="err">No games previous day</p>'; }
+  }
 }
 
-function rBT(bat,curBat,sg,dueUp){
-if(!bat?.length)return’<p style="text-align:center;color:var(--t4);padding:10px;font-size:10px">Lineup not posted</p>’;
-let h=`<table class="bt"><thead><tr><th style="text-align:left">#</th><th style="text-align:left">Batter</th><th style="text-align:center">P</th><th>AVG</th><th>OPS</th><th>wOBA</th>`;
-if(sg)h+=`<th>H</th><th>AB</th><th>HR</th><th>R</th><th>RBI</th>`;
-h+=`</tr></thead><tbody>`;
-bat.forEach((b,i)=>{
-let isUp=curBat&&b.id==curBat,isDue=dueUp.has(b.id);
-h+=`<tr class="${isUp?'ab':isDue?'du':''}"><td>${i+1}</td><td>${b.name}${isUp?' ◀':isDue?' ●':''}</td><td>${b.pos}</td>`;
-h+=`<td>${b.avg||'—'}</td><td>${b.ops||'—'}</td><td class="${wC(b.woba)}">${fmt(b.woba)}</td>`;
-if(sg){h+=`<td>${b.gH!=null?b.gH:'—'}</td><td>${b.gAB!=null?b.gAB:'—'}</td><td class="${b.gHR>0?'amb':''}">${b.gHR!=null?b.gHR:'—'}</td><td>${b.gR!=null?b.gR:'—'}</td><td>${b.gRBI!=null?b.gRBI:'—'}</td>`}
-h+=`</tr>`});
-h+=`</tbody></table>`;
-let ws=bat.map(b=>b.woba).filter(w=>w!=null),av=ws.length?ws.reduce((a,b)=>a+b,0)/ws.length:null;
-h+=`<div class="ta">Team wOBA: <span class="${wC(av)}" style="font-family:var(--mono)">${fmt(av)}</span></div>`;
-return h;
+// --- Load Schedule ---
+async function loadGamesQuiet() {
+  let data = await api('/api/v1/schedule?sportId=1&date=' + date + '&hydrate=probablePitcher,linescore,team');
+  games = data?.dates?.[0]?.games || [];
+  games.sort((a,b) => new Date(a.gameDate) - new Date(b.gameDate));
 }
 
-function $$(id){return document.getElementById(id)}
-init();
+async function load() {
+  mode = 'list'; sel = null; renderNav();
+  $('sub').textContent = 'LOADING...';
+  $('app').innerHTML = '<div class="loader"><div class="spin"></div><br>Fetching schedule...</div>';
+
+  let data = await api('/api/v1/schedule?sportId=1&date=' + date + '&hydrate=probablePitcher,linescore,team');
+  if (!data || !data.dates || !data.dates[0]) {
+    $('app').innerHTML = '<div class="err">No games found<br><button onclick="load()">Retry</button></div>';
+    $('sub').textContent = 'NO GAMES';
+    renderNav();
+    return;
+  }
+  games = data.dates[0].games || [];
+  games.sort((a,b) => new Date(a.gameDate) - new Date(b.gameDate));
+  $('sub').textContent = games.length + ' GAMES';
+  renderNav();
+  renderList();
+}
+
+function renderList() {
+  let html = '';
+  games.forEach((g, i) => {
+    let aw = g.teams.away, hm = g.teams.home;
+    let ap = aw.probablePitcher, hp = hm.probablePitcher;
+    let time = new Date(g.gameDate).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    let st = g.status?.abstractGameState || '';
+    let isL = st === 'Live', isF = st === 'Final';
+    let ls = g.linescore;
+
+    html += `<button class="card ${isL?'live':''}" onclick="openGame(${i})">`;
+    html += `<div style="display:flex;justify-content:space-between;margin-bottom:3px"><div style="font-size:12px;font-weight:700">${aw.team.abbreviation}<span style="color:#3f3f46;margin:0 4px">@</span>${hm.team.abbreviation}`;
+    if (isL) html += `<span class="badge blv">${ls?.isTopInning?'▲':'▼'} ${ls?.currentInningOrdinal||''}</span>`;
+    else if (isF) html += `<span class="badge bfn">FINAL</span>`;
+    html += `</div><span style="font-size:9px;color:#52525b">${time}</span></div>`;
+    html += `<div style="font-size:9px;color:#a1a1aa">${ap?ap.fullName:'TBD'} vs ${hp?hp.fullName:'TBD'}</div>`;
+
+    if (ls && (isL || isF)) {
+      let aR = ls.teams?.away?.runs ?? 0, hR = ls.teams?.home?.runs ?? 0;
+      html += `<div class="scorebar"><span style="font-size:11px;font-weight:600">${aw.team.abbreviation}</span><span class="num ${isF&&aR>hR?'w':''}">${aR}</span><span style="font-size:9px;color:${isL?'#a3e635':'#52525b'}">${isL?((ls.isTopInning?'▲':'▼')+' '+(ls.currentInningOrdinal||'')):g.status?.detailedState||''}</span><span class="num ${isF&&hR>aR?'w':''}">${hR}</span><span style="font-size:11px;font-weight:600">${hm.team.abbreviation}</span></div>`;
+    }
+    html += `</button>`;
+  });
+  $('app').innerHTML = html;
+}
+
+// --- Open Game Detail ---
+async function openGame(i) {
+  mode = 'detail'; sel = i;
+  renderNav();
+  let g = games[i];
+  $('app').innerHTML = '<div class="loader"><div class="spin"></div><br>Loading matchup...</div>';
+
+  try {
+    let aw = g.teams.away, hm = g.teams.home;
+    let ap = aw.probablePitcher, hp = hm.probablePitcher;
+    let isL = g.status?.abstractGameState === 'Live';
+    let isF = g.status?.abstractGameState === 'Final';
+    let ls = g.linescore;
+
+    // Fetch pitcher season stats (2 calls)
+    let [apData, hpData] = await Promise.all([
+      ap ? api('/api/v1/people/'+ap.id+'?hydrate=stats(group=[pitching],type=[season],season=2026)') : null,
+      hp ? api('/api/v1/people/'+hp.id+'?hydrate=stats(group=[pitching],type=[season],season=2026)') : null
+    ]);
+    let apS = apData?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat || null;
+    let hpS = hpData?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat || null;
+
+    // Fetch batter season stats per-player from boxscore batting order
+    // First get the lineup from the game feed
+    let feed = await api('/api/v1.1/game/'+g.gamePk+'/feed/live');
+    let box = feed?.liveData?.boxscore;
+    let plays = feed?.liveData?.plays;
+    let lsd = feed?.liveData?.linescore;
+    let curBatId = plays?.currentPlay?.matchup?.batter?.id || null;
+
+    // Extract batting order IDs and basic info from boxscore
+    function getLineup(side) {
+      if (!box) return [];
+      let info = box.teams?.[side];
+      if (!info) return [];
+      let order = info.battingOrder || [];
+      return order.map(id => {
+        let p = info.players?.['ID'+id];
+        if (!p) return null;
+        let gs = p.stats?.batting || {};
+        return {
+          id: id,
+          name: p.person?.fullName || '?',
+          pos: p.position?.abbreviation || '—',
+          gH: gs.hits, gAB: gs.atBats, gR: gs.runs, gRBI: gs.rbi, gHR: gs.homeRuns
+        };
+      }).filter(Boolean);
+    }
+
+    let awBat = getLineup('away');
+    let hmBat = getLineup('home');
+
+    // Fallback: get from roster
+    if (!awBat.length) {
+      let r = await api('/api/v1/teams/'+aw.team.id+'/roster?rosterType=active');
+      if (r?.roster) awBat = r.roster.filter(p=>p.position?.type!=='Pitcher').slice(0,9).map(p=>({id:p.person.id,name:p.person.fullName,pos:p.position.abbreviation}));
+    }
+    if (!hmBat.length) {
+      let r = await api('/api/v1/teams/'+hm.team.id+'/roster?rosterType=active');
+      if (r?.roster) hmBat = r.roster.filter(p=>p.position?.type!=='Pitcher').slice(0,9).map(p=>({id:p.person.id,name:p.person.fullName,pos:p.position.abbreviation}));
+    }
+
+    // Fetch season stats for each batter (this is slower but works reliably)
+    async function enrichBatter(b) {
+      let data = await api('/api/v1/people/'+b.id+'?hydrate=stats(group=[hitting],type=[season],season=2026)');
+      let ss = data?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat || null;
+      return { ...b, avg: ss?.avg||null, ops: ss?.ops||null, woba: calcWOBA(ss) };
+    }
+
+    // Run all batter fetches in parallel
+    let [enrichedAw, enrichedHm] = await Promise.all([
+      Promise.all(awBat.map(enrichBatter)),
+      Promise.all(hmBat.map(enrichBatter))
+    ]);
+
+    // Edge notes
+    let aW=aw.leagueRecord?.wins||0, aL=aw.leagueRecord?.losses||0;
+    let hW=hm.leagueRecord?.wins||0, hL=hm.leagueRecord?.losses||0;
+    let notes = [];
+    if (aW/(aW+aL||1) > .6) notes.push(aw.team.abbreviation+' hot at '+aW+'-'+aL+'.');
+    else if (aW/(aW+aL||1) < .4) notes.push(aw.team.abbreviation+' struggling at '+aW+'-'+aL+'.');
+    if (hW/(hW+hL||1) > .6) notes.push(hm.team.abbreviation+' strong at '+hW+'-'+hL+'.');
+    else if (hW/(hW+hL||1) < .4) notes.push(hm.team.abbreviation+' cold at '+hW+'-'+hL+'.');
+    let aEra = apS ? +apS.era : null, hEra = hpS ? +hpS.era : null;
+    if (aEra!=null && hEra!=null && Math.abs(aEra-hEra)>1.5) notes.push('Big pitching edge '+(aEra<hEra?aw.team.abbreviation:hm.team.abbreviation)+' — '+Math.min(aEra,hEra).toFixed(2)+' vs '+Math.max(aEra,hEra).toFixed(2)+' ERA.');
+    if (aEra!=null && aEra<2.5) notes.push((ap?.fullName||'')+' dominant ('+aEra.toFixed(2)+' ERA).');
+    if (hEra!=null && hEra<2.5) notes.push((hp?.fullName||'')+' dominant ('+hEra.toFixed(2)+' ERA).');
+    if (aEra!=null && aEra>5) notes.push((ap?.fullName||'')+' hittable — value on '+hm.team.abbreviation+'.');
+    if (hEra!=null && hEra>5) notes.push((hp?.fullName||'')+' hittable — value on '+aw.team.abbreviation+'.');
+    notes.push(hm.team.abbreviation+' bats last at home.');
+    let edgeText = notes.slice(0,5).join(' ');
+
+    // === RENDER ===
+    let html = '';
+
+    // Header
+    html += '<div class="mhdr">';
+    html += '<div style="font-size:16px;font-weight:700">'+aw.team.abbreviation+' <span style="color:#3f3f46">@</span> '+hm.team.abbreviation;
+    if (isL && lsd) html += '<span class="badge blv">'+(lsd.isTopInning?'▲':'▼')+' '+(lsd.currentInningOrdinal||'')+'</span>';
+    else if (isF) html += '<span class="badge bfn">FINAL</span>';
+    html += '</div>';
+    html += '<div style="font-size:9px;color:#52525b">('+aW+'-'+aL+') vs ('+hW+'-'+hL+')</div>';
+    if (ls && (isL||isF)) {
+      let aR=ls.teams?.away?.runs??0, hR=ls.teams?.home?.runs??0;
+      html += '<div style="margin-top:6px;font-family:monospace;font-size:28px;font-weight:800">'+aR+'<span style="color:#3f3f46;margin:0 8px">-</span>'+hR+'</div>';
+    }
+    html += '</div>';
+
+    // Edge
+    html += '<div class="edge"><b>EDGE </b>'+edgeText+'</div>';
+
+    // Linescore
+    if (lsd?.innings?.length && (isL||isF)) {
+      let inn = lsd.innings, ci = lsd.currentInning||inn.length, isTop = lsd.isTopInning;
+      html += '<div style="overflow-x:auto;margin-bottom:10px"><table style="width:100%;border-collapse:collapse;font-size:10px;font-family:monospace;min-width:300px"><thead><tr><th style="text-align:left;padding:3px;color:#52525b;border-bottom:1px solid #27272a;font-weight:400;font-size:9px"></th>';
+      inn.forEach((_,j) => html += '<th style="padding:3px;text-align:center;color:'+(isL&&j+1===ci?'#a3e635':'#52525b')+';border-bottom:1px solid #27272a;font-weight:'+(isL&&j+1===ci?'700':'400')+';font-size:9px">'+(j+1)+'</th>');
+      html += '<th style="padding:3px;text-align:center;font-weight:700;color:#fafafa;border-bottom:1px solid #27272a;font-size:9px">R</th><th style="padding:3px;text-align:center;font-weight:700;color:#fafafa;border-bottom:1px solid #27272a;font-size:9px">H</th><th style="padding:3px;text-align:center;font-weight:700;color:#fafafa;border-bottom:1px solid #27272a;font-size:9px">E</th></tr></thead><tbody>';
+      // Away
+      html += '<tr><td style="text-align:left;padding:3px;font-weight:600;color:#fafafa;font-family:-apple-system,sans-serif;border-bottom:1px solid rgba(39,39,42,.3)">'+aw.team.abbreviation+'</td>';
+      inn.forEach((n,j) => html += '<td style="padding:3px;text-align:center;color:'+(isL&&j+1===ci&&isTop?'#a3e635':'#a1a1aa')+';border-bottom:1px solid rgba(39,39,42,.3)">'+(n.away?.runs??'—')+'</td>');
+      html += '<td style="padding:3px;text-align:center;font-weight:700;color:#fafafa;border-bottom:1px solid rgba(39,39,42,.3)">'+(ls.teams?.away?.runs??0)+'</td><td style="padding:3px;text-align:center;font-weight:700;color:#fafafa;border-bottom:1px solid rgba(39,39,42,.3)">'+(ls.teams?.away?.hits??0)+'</td><td style="padding:3px;text-align:center;font-weight:700;color:#fafafa;border-bottom:1px solid rgba(39,39,42,.3)">'+(ls.teams?.away?.errors??0)+'</td></tr>';
+      // Home
+      html += '<tr><td style="text-align:left;padding:3px;font-weight:600;color:#fafafa;font-family:-apple-system,sans-serif;border-bottom:1px solid rgba(39,39,42,.3)">'+hm.team.abbreviation+'</td>';
+      inn.forEach((n,j) => html += '<td style="padding:3px;text-align:center;color:'+(isL&&j+1===ci&&!isTop?'#a3e635':'#a1a1aa')+';border-bottom:1px solid rgba(39,39,42,.3)">'+(n.home?.runs??'')+'</td>');
+      html += '<td style="padding:3px;text-align:center;font-weight:700;color:#fafafa;border-bottom:1px solid rgba(39,39,42,.3)">'+(ls.teams?.home?.runs??0)+'</td><td style="padding:3px;text-align:center;font-weight:700;color:#fafafa;border-bottom:1px solid rgba(39,39,42,.3)">'+(ls.teams?.home?.hits??0)+'</td><td style="padding:3px;text-align:center;font-weight:700;color:#fafafa;border-bottom:1px solid rgba(39,39,42,.3)">'+(ls.teams?.home?.errors??0)+'</td></tr>';
+      html += '</tbody></table></div>';
+    }
+
+    // Away team section
+    html += '<div style="font-size:12px;font-weight:700;margin-top:4px">'+aw.team.abbreviation+'</div>';
+    html += pitcherCard(ap, apS, aw.team.abbreviation+' SP');
+    html += '<div style="font-size:9px;color:#52525b;margin:4px 0 2px">Batting vs '+(hp?.fullName||'TBD')+'</div>';
+    html += batterTable(enrichedAw, curBatId, isL||isF);
+
+    html += '<hr class="divider">';
+
+    // Home team section
+    html += '<div style="font-size:12px;font-weight:700;margin-top:4px">'+hm.team.abbreviation+'</div>';
+    html += pitcherCard(hp, hpS, hm.team.abbreviation+' SP');
+    html += '<div style="font-size:9px;color:#52525b;margin:4px 0 2px">Batting vs '+(ap?.fullName||'TBD')+'</div>';
+    html += batterTable(enrichedHm, curBatId, isL||isF);
+
+    html += '<div class="leg"><span class="amb">■</span> at bat/HR <span class="grn">■</span> elite wOBA <span class="red">■</span> cold wOBA<br>wOBA from 2026 season components. FIP from K/BB/HR/IP. Arrows cycle games across days.</div>';
+    $('app').innerHTML = html;
+
+  } catch(e) {
+    console.error('Matchup error:', e);
+    $('app').innerHTML = '<div class="err">Error loading matchup<br><small>'+e.message+'</small><br><button onclick="openGame('+i+')">Retry</button></div>';
+  }
+}
+
+function pitcherCard(p, s, label) {
+  if (!p) return '<div class="pcard"><div class="lab">'+label+'</div><div style="font-size:14px;color:#52525b">TBD</div></div>';
+  let era = s ? +s.era : null;
+  let fip = calcFIP(s);
+  return '<div class="pcard"><div class="lab">'+label+'</div><div style="display:flex;justify-content:space-between"><div><div style="font-size:14px;font-weight:700">'+p.fullName+'</div><div style="font-size:9px;color:#52525b;margin-top:2px">'+(s?.wins||0)+'-'+(s?.losses||0)+' · '+(s?.inningsPitched||0)+' IP · '+(s?.strikeOuts||0)+' K · '+fmt(+(s?.whip||0),2)+' WHIP</div></div><div style="text-align:right"><div style="font-size:9px;color:#52525b">ERA / FIP</div><div style="font-size:14px;font-weight:700;font-family:monospace"><span class="'+eColor(era)+'">'+fmt(era,2)+'</span><span style="color:#3f3f46;margin:0 2px">/</span><span class="'+eColor(fip)+'">'+fmt(fip,2)+'</span></div></div></div></div>';
+}
+
+function batterTable(batters, curBatId, showGame) {
+  if (!batters || !batters.length) return '<p style="text-align:center;color:#3f3f46;padding:10px;font-size:10px">Lineup not posted</p>';
+  let html = '<table class="bt"><thead><tr><th style="text-align:left">#</th><th style="text-align:left">Batter</th><th style="text-align:center">P</th><th>AVG</th><th>OPS</th><th>wOBA</th>';
+  if (showGame) html += '<th>H</th><th>AB</th><th>HR</th><th>R</th><th>RBI</th>';
+  html += '</tr></thead><tbody>';
+  batters.forEach((b, i) => {
+    let isUp = curBatId && b.id == curBatId;
+    html += '<tr class="'+(isUp?'ab':'')+'"><td>'+(i+1)+'</td><td>'+b.name+(isUp?' ◀':'')+'</td><td>'+b.pos+'</td>';
+    html += '<td>'+(b.avg||'—')+'</td><td>'+(b.ops||'—')+'</td>';
+    html += '<td class="'+wColor(b.woba)+'">'+fmt(b.woba)+'</td>';
+    if (showGame) {
+      html += '<td>'+(b.gH!=null?b.gH:'—')+'</td>';
+      html += '<td>'+(b.gAB!=null?b.gAB:'—')+'</td>';
+      html += '<td class="'+(b.gHR>0?'amb':'')+'">'+(b.gHR!=null?b.gHR:'—')+'</td>';
+      html += '<td>'+(b.gR!=null?b.gR:'—')+'</td>';
+      html += '<td>'+(b.gRBI!=null?b.gRBI:'—')+'</td>';
+    }
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  let ws = batters.map(b=>b.woba).filter(w=>w!=null);
+  let avg = ws.length ? ws.reduce((a,b)=>a+b,0)/ws.length : null;
+  html += '<div style="font-size:9px;color:#52525b;margin-top:4px">Team wOBA: <span class="'+wColor(avg)+'" style="font-family:monospace">'+fmt(avg)+'</span></div>';
+  return html;
+}
+
+// Start
+load();
 </script>
 
 </body>
