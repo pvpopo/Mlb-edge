@@ -192,7 +192,7 @@ return n.slice(0,5).join(’ ’);
 
 async function loadM(idx){
 view=‘detail’;selG=idx;let g=games[idx],aw=g.teams.away,hm=g.teams.home,st=g.status?.abstractGameState||’’;
-rNav();$(‘app’).innerHTML=’<div class="loader"><div class="spin"></div><div>Fetching stats…</div><div style="color:var(--t4);font-size:9px;margin-top:4px">10-20s</div></div>’;
+rNav();$(‘app’).innerHTML=’<div class="loader"><div class="spin"></div><div>Loading matchup…</div></div>’;
 let ap=aw.probablePitcher,hp=hm.probablePitcher;
 let [aD,hD]=await Promise.all([ap?fJ(`${API}/people/${ap.id}?hydrate=stats(group=[pitching],type=[season],season=2026)`):null,hp?fJ(`${API}/people/${hp.id}?hydrate=stats(group=[pitching],type=[season],season=2026)`):null]);
 let aS=aD?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat||null,hS=hD?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat||null;
@@ -211,20 +211,21 @@ for(let i=allPlays.length-1;i>=0;i–){if(allPlays[i]?.result?.description){last
 // Current pitcher stats
 let curPitStats=null,curPitLabel=’’;
 if(curPit){let cpD=await fJ(`${API}/people/${curPit.id}?hydrate=stats(group=[pitching],type=[season],season=2026)`);curPitStats=cpD?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat||null;curPitLabel=curPit.fullName}
-// Box score for lineups
-let boxD=await fJ(`${API}/game/${g.gamePk}/boxscore`);
-let aBat=[],hBat=[];let uBox=box||boxD;
+// Box score for lineups — season stats are embedded in boxscore, no per-batter calls needed
+let aBat=[],hBat=[];let uBox=box;
+if(!uBox){let boxD=await fJ(`${API}/game/${g.gamePk}/boxscore`);uBox=boxD}
 if(uBox){[‘away’,‘home’].forEach(side=>{let info=uBox.teams[side],ord=info.battingOrder||[];
-let arr=ord.map(id=>{let p=info.players[‘ID’+id];let gs=p?.stats?.batting||p?.gameStats?.batting||{};
-return{id,name:p?.person?.fullName||’?’,pos:p?.position?.abbreviation||’—’,gameH:gs.hits??gs.h,gameAB:gs.atBats??gs.ab,gameR:gs.runs??gs.r,gameRBI:gs.rbi,gameHR:gs.homeRuns??gs.hr,gameBB:gs.baseOnBalls??gs.bb}});
+let arr=ord.map(id=>{let p=info.players[‘ID’+id];
+let gs=p?.stats?.batting||{};
+let ss=p?.seasonStats?.batting||{};
+return{id,name:p?.person?.fullName||’?’,pos:p?.position?.abbreviation||’—’,
+gameH:gs.hits??gs.h,gameAB:gs.atBats??gs.ab,gameR:gs.runs??gs.r,gameRBI:gs.rbi,gameHR:gs.homeRuns??gs.hr,gameBB:gs.baseOnBalls??gs.bb,
+avg:ss.avg||null,ops:ss.ops||null,obp:ss.obp||null,slg:ss.slg||null,
+woba:cW(ss),bvpW:null,bvpAB:0}});
 if(side===‘away’)aBat=arr;else hBat=arr})}
 if(!aBat.length){let r=await fJ(`${API}/teams/${aw.team.id}/roster?rosterType=active`);if(r?.roster)aBat=r.roster.filter(p=>[‘Hitter’,‘Outfielder’,‘Infielder’,‘Catcher’].includes(p.position.type)).slice(0,9).map(p=>({id:p.person.id,name:p.person.fullName,pos:p.position.abbreviation}))}
 if(!hBat.length){let r=await fJ(`${API}/teams/${hm.team.id}/roster?rosterType=active`);if(r?.roster)hBat=r.roster.filter(p=>[‘Hitter’,‘Outfielder’,‘Infielder’,‘Catcher’].includes(p.position.type)).slice(0,9).map(p=>({id:p.person.id,name:p.person.fullName,pos:p.position.abbreviation}))}
-async function enrich(bat,opp){return Promise.all(bat.map(async b=>{let [pD,bD]=await Promise.all([fJ(`${API}/people/${b.id}?hydrate=stats(group=[hitting],type=[season],season=2026)`),opp?fJ(`${API}/people/${b.id}/stats?stats=vsPlayer&opposingPlayerId=${opp}&group=hitting&sportId=1`):null]);
-let ss=pD?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat||null;let bS=bD?.stats?.[0]?.splits||[];let bC=null;
-if(bS.length){bC={};bS.forEach(sp=>{let s=sp.stat;Object.keys(s).forEach(k=>{if(typeof s[k]===‘number’)bC[k]=(bC[k]||0)+s[k]})})}
-return{…b,avg:ss?.avg||null,ops:ss?.ops||null,woba:cW(ss),bvpW:cW(bC),bvpAB:bC?.atBats||0}}))}
-let [eA,eH]=await Promise.all([enrich(aBat,hp?.id),enrich(hBat,ap?.id)]);
+let eA=aBat,eH=hBat;
 // Determine which team is batting
 let isTop=lsd?.isTopInning;
 let battingTeamSide=isTop?‘away’:‘home’; // who’s at bat
