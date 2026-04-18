@@ -8,65 +8,89 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#09090b">
 <title>MLB Edge</title>
-<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%2309090b' width='100' height='100' rx='20'/><text x='50' y='68' text-anchor='middle' font-size='50'>⚾</text></svg>">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#09090b;--s1:#111113;--s2:#1a1a1d;--bdr:#27272a;--t1:#fafafa;--t2:#a1a1aa;--t3:#52525b;--t4:#3f3f46;--amb:#f59e0b;--amb2:rgba(245,158,11,.12);--grn:#34d399;--red:#f87171;--sky:#38bdf8;--lime:#a3e635;--mono:'SF Mono','Menlo','Consolas',monospace}
-body{background:var(--bg);color:var(--t1);font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;padding:env(safe-area-inset-top) 12px 80px 12px}
+:root{--bg:#09090b;--s1:#111113;--s2:#1a1a1d;--bdr:#27272a;--t1:#fafafa;--t2:#a1a1aa;--t3:#52525b;--t4:#3f3f46;--amb:#f59e0b;--amb2:rgba(245,158,11,.12);--grn:#34d399;--red:#f87171;--sky:#38bdf8;--lime:#a3e635;--gold:#fbbf24;--mono:'SF Mono','Menlo','Consolas',monospace}
+body{background:var(--bg);color:var(--t1);font-family:-apple-system,'SF Pro Text',sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;padding:env(safe-area-inset-top) 12px 80px 12px}
 .hdr{display:flex;align-items:center;gap:8px;margin-bottom:2px;padding-top:8px}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--amb)}
-.dot.live{animation:pulse 1.5s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-h1{font-size:15px;font-weight:700;letter-spacing:-.3px}
+.dot.live{animation:pu 1.5s infinite}
+@keyframes pu{0%,100%{opacity:1}50%{opacity:.3}}
+h1{font-size:15px;font-weight:700}
 .sub{font-size:9px;color:var(--t3);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px}
 .nav-row{display:flex;gap:4px;margin-bottom:12px}
-.nav-row button{background:var(--s1);border:1px solid var(--bdr);color:var(--t2);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.nav-row button:active{background:var(--s2)}
+.nav-row button,.gnav button{background:var(--s1);border:1px solid var(--bdr);color:var(--t2);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}
+.nav-row button:active,.gnav button:active{background:var(--s2)}
 .nav-row .cur{flex:1;text-align:center;font-size:11px;display:flex;align-items:center;justify-content:center;color:var(--t2)}
+.gnav{display:flex;gap:4px;margin-bottom:10px}
+.gnav .gl{flex:1;text-align:center;display:flex;flex-direction:column;justify-content:center;font-size:10px;color:var(--t3)}
+.gnav .gl strong{color:var(--t1);font-size:12px}
 .filters{display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap}
 .fbtn{background:var(--s1);border:1px solid var(--bdr);color:var(--t3);border-radius:6px;padding:4px 10px;font-size:10px;letter-spacing:.8px;cursor:pointer}
 .fbtn.on{background:var(--amb2);color:var(--amb);border-color:rgba(245,158,11,.25)}
-.gcard{display:block;width:100%;text-align:left;background:var(--s1);border:1px solid var(--bdr);border-radius:10px;padding:10px;margin-bottom:6px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .15s}
-.gcard:active{background:var(--s2)}
-.gcard.live-card{border-color:rgba(163,230,53,.25)}
-.gcard .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
-.gcard .teams{font-size:12px;font-weight:700}
-.gcard .teams .at{color:var(--t4);font-weight:400;margin:0 4px}
-.gcard .time{font-size:9px;color:var(--t3)}
-.gcard .pits{font-size:9px;color:var(--t2);margin-top:2px}
-.gcard .score-line{display:flex;justify-content:space-between;align-items:center;background:var(--s2);border-radius:6px;padding:6px 8px;margin-top:6px}
-.gcard .score-team{font-size:11px;font-weight:600}
-.gcard .score-num{font-size:16px;font-weight:800;font-family:var(--mono)}
-.gcard .score-num.winner{color:var(--grn)}
-.gcard .score-inning{font-size:9px;color:var(--lime);text-align:center}
-.gcard .score-sep{display:flex;flex-direction:column;align-items:center;gap:1px}
-.back{font-size:10px;color:var(--amb);background:none;border:none;cursor:pointer;margin-bottom:8px;padding:4px 0}
-.matchup-hdr{background:var(--s1);border:1px solid var(--bdr);border-radius:10px;padding:10px;text-align:center;margin-bottom:8px}
-.matchup-hdr .vs{font-size:16px;font-weight:700}
-.matchup-hdr .rec{font-size:9px;color:var(--t3)}
-.matchup-hdr .gtime{font-size:9px;color:var(--t3);margin-top:3px}
+.gc{display:block;width:100%;text-align:left;background:var(--s1);border:1px solid var(--bdr);border-radius:10px;padding:10px;margin-bottom:6px;cursor:pointer}
+.gc:active{background:var(--s2)}
+.gc.lv{border-color:rgba(163,230,53,.25)}
+.gc .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+.gc .tms{font-size:12px;font-weight:700}
+.gc .tms .at{color:var(--t4);font-weight:400;margin:0 4px}
+.gc .tm{font-size:9px;color:var(--t3)}
+.gc .pt{font-size:9px;color:var(--t2);margin-top:2px}
+.gc .sl{display:flex;justify-content:space-between;align-items:center;background:var(--s2);border-radius:6px;padding:6px 8px;margin-top:6px}
+.gc .sn{font-size:16px;font-weight:800;font-family:var(--mono)}
+.gc .sn.w{color:var(--grn)}
+.gc .si{font-size:9px;color:var(--lime);text-align:center}
+.gc .st{font-size:11px;font-weight:600}
+.lb{display:inline-block;font-size:8px;font-weight:700;padding:2px 5px;border-radius:4px;letter-spacing:1px;margin-left:6px}
+.lb-live{background:rgba(163,230,53,.15);color:var(--lime)}
+.lb-fin{background:rgba(113,113,122,.15);color:var(--t3)}
+.mhdr{background:var(--s1);border:1px solid var(--bdr);border-radius:10px;padding:10px;text-align:center;margin-bottom:8px}
+/* Live HUD */
+.hud{background:var(--s1);border:1px solid var(--bdr);border-radius:10px;padding:12px;margin-bottom:10px}
+.hud-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.hud-inn{font-size:13px;font-weight:700;color:var(--lime)}
+.hud-score{font-family:var(--mono);font-size:20px;font-weight:800}
+.hud-mid{display:flex;align-items:center;justify-content:space-around;margin-bottom:10px}
+.bases{position:relative;width:60px;height:60px}
+.base{position:absolute;width:14px;height:14px;transform:rotate(45deg);border:1.5px solid var(--t4);border-radius:2px;background:transparent}
+.base.on{background:var(--gold);border-color:var(--gold)}
+.b1{right:2px;top:50%;margin-top:-7px}
+.b2{left:50%;top:2px;margin-left:-7px}
+.b3{left:2px;top:50%;margin-top:-7px}
+.count-row{display:flex;flex-direction:column;gap:4px}
+.count-label{font-size:8px;color:var(--t3);letter-spacing:1px;width:10px}
+.count-dots{display:flex;gap:3px;align-items:center}
+.cdot{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--t4)}
+.cdot.b-on{background:#22c55e;border-color:#22c55e}
+.cdot.s-on{background:var(--red);border-color:var(--red)}
+.cdot.o-on{background:var(--gold);border-color:var(--gold)}
+.hud-matchup{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--bdr)}
+.hud-p{text-align:left}
+.hud-b{text-align:right}
+.hud-role{font-size:8px;color:var(--t3);letter-spacing:1px;text-transform:uppercase}
+.hud-name{font-size:13px;font-weight:700}
+.hud-stat{font-size:9px;color:var(--t3);font-family:var(--mono)}
+.last-play{background:rgba(163,230,53,.06);border:1px solid rgba(163,230,53,.12);border-radius:8px;padding:8px;margin-bottom:10px;font-size:10px;color:var(--t2);line-height:1.5}
+.last-play b{color:var(--lime);font-size:9px;letter-spacing:1px}
 .edge-box{background:var(--amb2);border:1px solid rgba(245,158,11,.15);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:10px;color:rgba(245,158,11,.85);line-height:1.55}
 .edge-box b{color:var(--amb);font-size:9px;letter-spacing:1px}
-.live-badge{display:inline-block;background:rgba(163,230,53,.15);color:var(--lime);font-size:8px;font-weight:700;padding:2px 5px;border-radius:4px;letter-spacing:1px;margin-left:6px}
-.final-badge{display:inline-block;background:rgba(113,113,122,.15);color:var(--t3);font-size:8px;font-weight:700;padding:2px 5px;border-radius:4px;letter-spacing:1px;margin-left:6px}
-.linescore{overflow-x:auto;margin-bottom:10px}
-.linescore table{width:100%;border-collapse:collapse;font-size:10px;font-family:var(--mono);min-width:320px}
-.linescore th{padding:4px 3px;text-align:center;color:var(--t3);font-weight:400;border-bottom:1px solid var(--bdr);font-size:9px}
-.linescore th:first-child{text-align:left;width:36px}
-.linescore td{padding:4px 3px;text-align:center;color:var(--t2);border-bottom:1px solid rgba(39,39,42,.3)}
-.linescore td:first-child{text-align:left;font-weight:600;color:var(--t1);font-family:-apple-system,sans-serif}
-.linescore .rhe{font-weight:700;color:var(--t1)}
-.linescore .cur-inn{color:var(--lime);font-weight:700}
-.team-hdr{font-size:12px;font-weight:700;color:var(--t1);margin-top:6px}
-.team-vs{font-size:9px;color:var(--t3);margin-bottom:6px}
-.pcard{background:var(--s1);border:1px solid var(--bdr);border-radius:10px;padding:10px;margin-bottom:6px}
-.pcard .lab{font-size:9px;color:var(--amb);letter-spacing:1.2px;text-transform:uppercase;margin-bottom:4px}
-.pcard .row{display:flex;justify-content:space-between;align-items:flex-start}
-.pcard .name{font-size:14px;font-weight:700}
-.pcard .meta{font-size:9px;color:var(--t3);margin-top:2px}
-.pcard .era-label{font-size:9px;color:var(--t3)}
-.pcard .era-vals{font-size:14px;font-weight:700;font-family:var(--mono)}
-.pcard .era-vals .sep{color:var(--t4);margin:0 2px}
+.lsc{overflow-x:auto;margin-bottom:10px}
+.lsc table{width:100%;border-collapse:collapse;font-size:10px;font-family:var(--mono);min-width:320px}
+.lsc th{padding:4px 3px;text-align:center;color:var(--t3);font-weight:400;border-bottom:1px solid var(--bdr);font-size:9px}
+.lsc th:first-child{text-align:left;width:36px}
+.lsc td{padding:4px 3px;text-align:center;color:var(--t2);border-bottom:1px solid rgba(39,39,42,.3)}
+.lsc td:first-child{text-align:left;font-weight:600;color:var(--t1);font-family:-apple-system,sans-serif}
+.lsc .rhe{font-weight:700;color:var(--t1)}
+.lsc .ci{color:var(--lime);font-weight:700}
+.thdr{font-size:12px;font-weight:700;color:var(--t1);margin-top:6px}
+.pc{background:var(--s1);border:1px solid var(--bdr);border-radius:10px;padding:10px;margin-bottom:6px}
+.pc .lab{font-size:9px;color:var(--amb);letter-spacing:1.2px;text-transform:uppercase;margin-bottom:4px}
+.pc .row{display:flex;justify-content:space-between;align-items:flex-start}
+.pc .nm{font-size:14px;font-weight:700}
+.pc .mt{font-size:9px;color:var(--t3);margin-top:2px}
+.pc .el{font-size:9px;color:var(--t3)}
+.pc .ev{font-size:14px;font-weight:700;font-family:var(--mono)}
+.pc .ev .sp{color:var(--t4);margin:0 2px}
 table.bt{width:100%;border-collapse:collapse;font-size:10px}
 table.bt th{text-align:right;padding:3px 2px;font-weight:400;color:var(--t3);border-bottom:1px solid var(--bdr)}
 table.bt th:first-child,table.bt th:nth-child(2){text-align:left}
@@ -74,10 +98,12 @@ table.bt td{padding:4px 2px;border-bottom:1px solid rgba(39,39,42,.4);font-famil
 table.bt td:first-child{text-align:left;color:var(--t4);font-size:9px;width:14px}
 table.bt td:nth-child(2){text-align:left;color:var(--t1);font-family:-apple-system,sans-serif;font-weight:500;max-width:95px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 table.bt td:nth-child(3){text-align:center;color:var(--t3);font-family:-apple-system,sans-serif}
-table.bt tr.at-bat{background:rgba(163,230,53,.08);border-left:2px solid var(--lime)}
-table.bt tr.at-bat td:nth-child(2){color:var(--lime);font-weight:700}
-.tm-avg{font-size:9px;color:var(--t3);margin-top:4px;padding-left:2px}
-.tm-avg span{font-family:var(--mono)}
+table.bt tr.at-bat{background:rgba(251,191,36,.1);border-left:2px solid var(--gold)}
+table.bt tr.at-bat td:nth-child(2){color:var(--gold);font-weight:700}
+table.bt tr.due-up{background:rgba(56,189,248,.06);border-left:2px solid rgba(56,189,248,.4)}
+table.bt tr.due-up td:nth-child(2){color:var(--sky)}
+.ta{font-size:9px;color:var(--t3);margin-top:4px;padding-left:2px}
+.ta span{font-family:var(--mono)}
 .grn{color:var(--grn)}.red{color:var(--red)}.sky{color:var(--sky)}.amb{color:var(--amb);font-weight:600}.t2c{color:var(--t2)}
 .legend{background:rgba(17,17,19,.6);border:1px solid rgba(39,39,42,.4);border-radius:8px;padding:8px;margin-top:14px;font-size:9px;color:var(--t3);line-height:1.6}
 .loader{text-align:center;padding:60px 0;color:var(--t3);font-size:11px}
@@ -85,350 +111,221 @@ table.bt tr.at-bat td:nth-child(2){color:var(--lime);font-weight:700}
 @keyframes sp{to{transform:rotate(360deg)}}
 .empty{text-align:center;padding:20px;color:var(--t4);font-size:10px}
 .divider{border:none;border-top:1px solid var(--bdr);margin:14px 0}
-.refresh-btn{background:var(--s1);border:1px solid var(--bdr);color:var(--t2);border-radius:8px;padding:6px 14px;font-size:10px;cursor:pointer;margin-left:auto}
-.refresh-btn:active{background:var(--s2)}
-.game-nav{display:flex;gap:4px;margin-bottom:10px}
-.game-nav button{background:var(--s1);border:1px solid var(--bdr);color:var(--t2);border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:700}
-.game-nav button:active{background:var(--s2)}
-.game-nav .game-label{flex:1;text-align:center;display:flex;flex-direction:column;justify-content:center;font-size:10px;color:var(--t3)}
-.game-nav .game-label strong{color:var(--t1);font-size:12px}
+.rbtn{background:var(--s1);border:1px solid var(--bdr);color:var(--t2);border-radius:8px;padding:6px 14px;font-size:10px;cursor:pointer;margin-left:auto}
 </style>
 </head>
 <body>
-<div class="hdr"><div class="dot" id="liveDot"></div><h1>MLB Edge</h1><button class="refresh-btn" onclick="location.reload()">↻</button></div>
-<div class="sub" id="subtitle">LOADING...</div>
+<div class="hdr"><div class="dot" id="ld"></div><h1>MLB Edge</h1><button class="rbtn" onclick="location.reload()">↻</button></div>
+<div class="sub" id="sub">LOADING...</div>
 <div id="nav"></div>
 <div id="app"></div>
-
 <script>
 const API='https://statsapi.mlb.com/api/v1';
-const W={bb:.69,hbp:.72,s:.88,d:1.24,t:1.57,hr:2.01};
-const FIP_C=3.10;
-let currentDate=new Date().toISOString().slice(0,10);
-let games=[];
-let gameLiveData={};
-let view='list';
-let selectedGame=null;
-let filter='ALL';
-let refreshTimer=null;
-
+const W={bb:.69,hbp:.72,s:.88,d:1.24,t:1.57,hr:2.01},FIP_C=3.10;
+let cDate=new Date().toISOString().slice(0,10),games=[],liveCache={},view='list',selG=null,filter='ALL',rTimer=null;
 function $(id){return document.getElementById(id)}
 function fmt(v,d=3){return v==null||isNaN(v)?'—':Number(v).toFixed(d)}
-function wC(w){if(w==null)return't2c';let n=Number(w);if(n>.37)return'amb';if(n>.34)return'grn';if(n<.26)return'sky';if(n<.30)return'red';return't2c'}
-function eC(v){if(v==null)return't2c';let n=Number(v);if(n<3.5)return'grn';if(n>4.5)return'red';return't2c'}
-function calcWOBA(s){if(!s)return null;let si=(s.hits||0)-(s.doubles||0)-(s.triples||0)-(s.homeRuns||0);let n=W.bb*((s.baseOnBalls||0)-(s.intentionalWalks||0))+W.hbp*(s.hitByPitch||0)+W.s*si+W.d*(s.doubles||0)+W.t*(s.triples||0)+W.hr*(s.homeRuns||0);let d=(s.atBats||0)+(s.baseOnBalls||0)-(s.intentionalWalks||0)+(s.sacFlies||0)+(s.hitByPitch||0);return d>0?n/d:null}
-function calcFIP(s){if(!s)return null;let ip=parseFloat(s.inningsPitched||0);if(ip===0)return null;return(13*(s.homeRuns||0)+3*((s.baseOnBalls||0)+(s.hitByPitch||0))-2*(s.strikeOuts||0))/ip+FIP_C}
-async function fetchJ(url){try{let r=await fetch(url);if(!r.ok)return null;return r.json()}catch(e){return null}}
+function wC(w){if(w==null)return't2c';let n=+w;if(n>.37)return'amb';if(n>.34)return'grn';if(n<.26)return'sky';if(n<.30)return'red';return't2c'}
+function eC(v){if(v==null)return't2c';let n=+v;if(n<3.5)return'grn';if(n>4.5)return'red';return't2c'}
+function cW(s){if(!s)return null;let si=(s.hits||0)-(s.doubles||0)-(s.triples||0)-(s.homeRuns||0);let n=W.bb*((s.baseOnBalls||0)-(s.intentionalWalks||0))+W.hbp*(s.hitByPitch||0)+W.s*si+W.d*(s.doubles||0)+W.t*(s.triples||0)+W.hr*(s.homeRuns||0);let d=(s.atBats||0)+(s.baseOnBalls||0)-(s.intentionalWalks||0)+(s.sacFlies||0)+(s.hitByPitch||0);return d>0?n/d:null}
+function cF(s){if(!s)return null;let ip=parseFloat(s.inningsPitched||0);if(!ip)return null;return(13*(s.homeRuns||0)+3*((s.baseOnBalls||0)+(s.hitByPitch||0))-2*(s.strikeOuts||0))/ip+FIP_C}
+async function fJ(u){try{let r=await fetch(u);if(!r.ok)return null;return r.json()}catch{return null}}
+function pDate(d){return new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}
 
-function prettyDate(d){return new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}
+function rNav(){
+if(view===‘list’){$(‘nav’).innerHTML=`<div class="nav-row"><button onclick="sDate(-1)">←</button><div class="cur">${pDate(cDate)}</div><button onclick="sDate(1)">→</button></div>`}
+else{let g=games[selG],a=g.teams.away.team.abbreviation,h=g.teams.home.team.abbreviation;
+$(‘nav’).innerHTML=`<div class="gnav"><button onclick="pG()">←</button><div class="gl"><strong>${a} @ ${h}</strong>${selG+1} of ${games.length} · ${pDate(cDate)}</div><button onclick="nG()">→</button></div>`}
+}
+function sDate(dir){let d=new Date(cDate+‘T12:00:00’);d.setDate(d.getDate()+dir);cDate=d.toISOString().slice(0,10);loadSch()}
+async function nG(){if(selG<games.length-1)loadM(selG+1);else{let d=new Date(cDate+‘T12:00:00’);d.setDate(d.getDate()+1);cDate=d.toISOString().slice(0,10);await loadSchQ();games.length?loadM(0):($(‘app’).innerHTML=’<div class="empty">No games</div>’,view=‘list’,rNav())}}
+async function pG(){if(selG>0)loadM(selG-1);else{let d=new Date(cDate+‘T12:00:00’);d.setDate(d.getDate()-1);cDate=d.toISOString().slice(0,10);await loadSchQ();games.length?loadM(games.length-1):($(‘app’).innerHTML=’<div class="empty">No games</div>’,view=‘list’,rNav())}}
 
-function renderNav(){
-  if(view==='list'){
-    $('nav').innerHTML=`<div class="nav-row"><button onclick="shiftDate(-1)">←</button><div class="cur">${prettyDate(currentDate)}</div><button onclick="shiftDate(1)">→</button></div>`;
-  }else{
-    let g=games[selectedGame];
-    let away=g.teams.away.team.abbreviation,home=g.teams.home.team.abbreviation;
-    $('nav').innerHTML=`<div class="game-nav"><button onclick="prevGame()">←</button><div class="game-label"><strong>${away} @ ${home}</strong>${selectedGame+1} of ${games.length} · ${prettyDate(currentDate)}</div><button onclick="nextGame()">→</button></div>`;
-  }
+async function loadSchQ(){let d=await fJ(`${API}/schedule?sportId=1&date=${cDate}&hydrate=probablePitcher(note),linescore,team`);if(!d?.dates?.[0]){games=[];return}games=d.dates[0].games||[];games.sort((a,b)=>new Date(a.gameDate)-new Date(b.gameDate));await fLS()}
+async function loadSch(){
+view=‘list’;selG=null;filter=‘ALL’;if(rTimer)clearInterval(rTimer);rNav();
+$(‘sub’).textContent=‘LOADING…’;$(‘app’).innerHTML=’<div class="loader"><div class="spin"></div><div>Fetching games…</div></div>’;
+let d=await fJ(`${API}/schedule?sportId=1&date=${cDate}&hydrate=probablePitcher(note),linescore,team`);
+if(!d?.dates?.[0]){$(‘app’).innerHTML=’<div class="empty">No games</div>’;$(‘sub’).textContent=‘NO GAMES’;rNav();return}
+games=d.dates[0].games||[];games.sort((a,b)=>new Date(a.gameDate)-new Date(b.gameDate));await fLS();
+let hl=games.some(g=>g.status?.abstractGameState===‘Live’);
+$(‘ld’).className=hl?‘dot live’:‘dot’;$(‘sub’).textContent=`${games.length} GAMES${hl?' · LIVE':''}`;rNav();rList();
+if(hl)rTimer=setInterval(async()=>{let d=await fJ(`${API}/schedule?sportId=1&date=${cDate}&hydrate=probablePitcher(note),linescore,team`);if(d?.dates?.[0]){games=d.dates[0].games;games.sort((a,b)=>new Date(a.gameDate)-new Date(b.gameDate))}await fLS();if(view===‘list’)rList()},30000)
+}
+async function fLS(){liveCache={};let lg=games.filter(g=>{let s=g.status?.abstractGameState;return s===‘Live’||s===‘Final’});await Promise.all(lg.map(async g=>{let f=await fJ(`${API}/v1.1/game/${g.gamePk}/feed/live`);if(f)liveCache[g.gamePk]=f}))}
+
+function gTag(g){let h=new Date(g.gameDate).getHours();return h<16?‘EARLY’:h<20?‘MID’:‘LATE’}
+function rList(){
+let fl=filter===‘ALL’?games:games.filter(g=>gTag(g)===filter);
+let tags=[…new Set(games.map(gTag))];
+let h=’<div class="filters">’;h+=`<button class="fbtn ${filter==='ALL'?'on':''}" onclick="sF('ALL')">ALL</button>`;
+tags.forEach(t=>{h+=`<button class="fbtn ${filter===t?'on':''}" onclick="sF('${t}')">${t}</button>`});h+=’</div>’;
+fl.forEach(g=>{let idx=games.indexOf(g),aw=g.teams.away,hm=g.teams.home,ap=aw.probablePitcher,hp=hm.probablePitcher;
+let tm=new Date(g.gameDate).toLocaleTimeString(‘en-US’,{hour:‘numeric’,minute:‘2-digit’});
+let st=g.status?.abstractGameState||’’,dt=g.status?.detailedState||’’,isL=st===‘Live’,isF=st===‘Final’,ls=g.linescore,lsd=liveCache[g.gamePk]?.liveData?.linescore;
+h+=`<button class="gc ${isL?'lv':''}" onclick="loadM(${idx})"><div class="top"><div class="tms">${aw.team.abbreviation}<span class="at">@</span>${hm.team.abbreviation}`;
+if(isL&&lsd)h+=`<span class="lb lb-live">${lsd.isTopInning?'▲':'▼'} ${lsd.currentInningOrdinal||''}</span>`;
+else if(isF)h+=`<span class="lb lb-fin">FINAL</span>`;
+h+=`</div><div class="tm">${tm}</div></div>`;
+h+=`<div class="pt">${ap?ap.fullName:'TBD'} vs ${hp?hp.fullName:'TBD'}</div>`;
+if(ls&&(isL||isF)){let aR=ls.teams?.away?.runs??0,hR=ls.teams?.home?.runs??0;
+h+=`<div class="sl"><div><div class="st">${aw.team.abbreviation}</div></div><div class="sn ${isF&&aR>hR?'w':''}">${aR}</div><div style="display:flex;flex-direction:column;align-items:center"><div class="si">${isL&&lsd?((lsd.isTopInning?'▲':'▼')+' '+lsd.currentInningOrdinal):dt}</div></div><div class="sn ${isF&&hR>aR?'w':''}">${hR}</div><div style="text-align:right"><div class="st">${hm.team.abbreviation}</div></div></div>`}
+h+=`</button>`});
+$(‘app’).innerHTML=h;
+}
+function sF(f){filter=f;rList()}
+
+function genEdge(g,aS,hS){
+let aw=g.teams.away,hm=g.teams.home;let aW=aw.leagueRecord?.wins||0,aL=aw.leagueRecord?.losses||0,hW=hm.leagueRecord?.wins||0,hL=hm.leagueRecord?.losses||0;
+let ap=aw.probablePitcher,hp=hm.probablePitcher;let aE=aS?+aS.era:null,hE=hS?+hS.era:null;let n=[];
+let aP=aW/(aW+aL||1),hP=hW/(hW+hL||1);
+if(aP>.6)n.push(`${aw.team.abbreviation} rolling at ${aW}-${aL}.`);else if(aP<.4)n.push(`${aw.team.abbreviation} struggling at ${aW}-${aL}.`);
+if(hP>.6)n.push(`${hm.team.abbreviation} strong at ${hW}-${hL} overall.`);else if(hP<.4)n.push(`${hm.team.abbreviation} cold at ${hW}-${hL}.`);
+if(aE!=null&&hE!=null){let d=Math.abs(aE-hE);if(d>1.5){let b=aE<hE?aw.team.abbreviation:hm.team.abbreviation;n.push(`Big pitching edge ${b} — ${Math.min(aE,hE).toFixed(2)} vs ${Math.max(aE,hE).toFixed(2)} ERA.`)}else if(d<.5)n.push(`Tight pitching matchup — both starters within half a run.`)}
+if(aE!=null&&aE<2.5)n.push(`${ap?.fullName} dominant (${aE.toFixed(2)} ERA).`);if(hE!=null&&hE<2.5)n.push(`${hp?.fullName} dominant (${hE.toFixed(2)} ERA).`);
+if(aE!=null&&aE>5)n.push(`${ap?.fullName} hittable (${aE.toFixed(2)} ERA) — value on ${hm.team.abbreviation}.`);if(hE!=null&&hE>5)n.push(`${hp?.fullName} hittable (${hE.toFixed(2)} ERA) — value on ${aw.team.abbreviation}.`);
+if(aS&&+aS.inningsPitched>0){let k9=((aS.strikeOuts||0)/+aS.inningsPitched)*9;if(k9>10)n.push(`${ap?.fullName} ${k9.toFixed(1)} K/9 — high whiff.`)}
+if(hS&&+hS.inningsPitched>0){let k9=((hS.strikeOuts||0)/+hS.inningsPitched)*9;if(k9>10)n.push(`${hp?.fullName} ${k9.toFixed(1)} K/9 — high whiff.`)}
+n.push(`${hm.team.abbreviation} bats last at home.`);
+return n.slice(0,5).join(’ ’);
 }
 
-function shiftDate(dir){
-  let d=new Date(currentDate+'T12:00:00');d.setDate(d.getDate()+dir);
-  currentDate=d.toISOString().slice(0,10);loadSchedule();
+async function loadM(idx){
+view=‘detail’;selG=idx;let g=games[idx],aw=g.teams.away,hm=g.teams.home,st=g.status?.abstractGameState||’’;
+rNav();$(‘app’).innerHTML=’<div class="loader"><div class="spin"></div><div>Fetching stats…</div><div style="color:var(--t4);font-size:9px;margin-top:4px">10-20s</div></div>’;
+let ap=aw.probablePitcher,hp=hm.probablePitcher;
+let [aD,hD]=await Promise.all([ap?fJ(`${API}/people/${ap.id}?hydrate=stats(group=[pitching],type=[season],season=2026)`):null,hp?fJ(`${API}/people/${hp.id}?hydrate=stats(group=[pitching],type=[season],season=2026)`):null]);
+let aS=aD?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat||null,hS=hD?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat||null;
+let feed=await fJ(`${API}/v1.1/game/${g.gamePk}/feed/live`);if(feed)liveCache[g.gamePk]=feed;
+let box=feed?.liveData?.boxscore,plays=feed?.liveData?.plays,lsd=feed?.liveData?.linescore;
+let curBat=plays?.currentPlay?.matchup?.batter?.id||null;
+let curPit=plays?.currentPlay?.matchup?.pitcher||null;
+let onDeck=lsd?.offense?.onDeck?.id||null,inHole=lsd?.offense?.inHole?.id||null;
+// Runners
+let r1=!!lsd?.offense?.first,r2=!!lsd?.offense?.second,r3=!!lsd?.offense?.third;
+// Count
+let cnt=plays?.currentPlay?.count||{};
+// Last play
+let allPlays=plays?.allPlays||[];let lastPlay=null;
+for(let i=allPlays.length-1;i>=0;i–){if(allPlays[i]?.result?.description){lastPlay=allPlays[i].result.description;break}}
+// Current pitcher stats
+let curPitStats=null,curPitLabel=’’;
+if(curPit){let cpD=await fJ(`${API}/people/${curPit.id}?hydrate=stats(group=[pitching],type=[season],season=2026)`);curPitStats=cpD?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat||null;curPitLabel=curPit.fullName}
+// Box score for lineups
+let boxD=await fJ(`${API}/game/${g.gamePk}/boxscore`);
+let aBat=[],hBat=[];let uBox=box||boxD;
+if(uBox){[‘away’,‘home’].forEach(side=>{let info=uBox.teams[side],ord=info.battingOrder||[];
+let arr=ord.map(id=>{let p=info.players[‘ID’+id];let gs=p?.stats?.batting||p?.gameStats?.batting||{};
+return{id,name:p?.person?.fullName||’?’,pos:p?.position?.abbreviation||’—’,gameH:gs.hits??gs.h,gameAB:gs.atBats??gs.ab,gameR:gs.runs??gs.r,gameRBI:gs.rbi,gameHR:gs.homeRuns??gs.hr,gameBB:gs.baseOnBalls??gs.bb}});
+if(side===‘away’)aBat=arr;else hBat=arr})}
+if(!aBat.length){let r=await fJ(`${API}/teams/${aw.team.id}/roster?rosterType=active`);if(r?.roster)aBat=r.roster.filter(p=>[‘Hitter’,‘Outfielder’,‘Infielder’,‘Catcher’].includes(p.position.type)).slice(0,9).map(p=>({id:p.person.id,name:p.person.fullName,pos:p.position.abbreviation}))}
+if(!hBat.length){let r=await fJ(`${API}/teams/${hm.team.id}/roster?rosterType=active`);if(r?.roster)hBat=r.roster.filter(p=>[‘Hitter’,‘Outfielder’,‘Infielder’,‘Catcher’].includes(p.position.type)).slice(0,9).map(p=>({id:p.person.id,name:p.person.fullName,pos:p.position.abbreviation}))}
+async function enrich(bat,opp){return Promise.all(bat.map(async b=>{let [pD,bD]=await Promise.all([fJ(`${API}/people/${b.id}?hydrate=stats(group=[hitting],type=[season],season=2026)`),opp?fJ(`${API}/people/${b.id}/stats?stats=vsPlayer&opposingPlayerId=${opp}&group=hitting&sportId=1`):null]);
+let ss=pD?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat||null;let bS=bD?.stats?.[0]?.splits||[];let bC=null;
+if(bS.length){bC={};bS.forEach(sp=>{let s=sp.stat;Object.keys(s).forEach(k=>{if(typeof s[k]===‘number’)bC[k]=(bC[k]||0)+s[k]})})}
+return{…b,avg:ss?.avg||null,ops:ss?.ops||null,woba:cW(ss),bvpW:cW(bC),bvpAB:bC?.atBats||0}}))}
+let [eA,eH]=await Promise.all([enrich(aBat,hp?.id),enrich(hBat,ap?.id)]);
+// Determine which team is batting
+let isTop=lsd?.isTopInning;
+let battingTeamSide=isTop?‘away’:‘home’; // who’s at bat
+// Due up: find next 3 batters after current batter in the batting team’s order
+let battingOrder=battingTeamSide===‘away’?eA:eH;
+let dueUpIds=new Set();
+if(curBat&&battingOrder.length){let ci=battingOrder.findIndex(b=>b.id==curBat);if(ci>=0){for(let j=1;j<=3;j++){let ni=(ci+j)%battingOrder.length;dueUpIds.add(battingOrder[ni].id)}}}
+
+renderM(g,{aS,hS,ap,hp,eA,eH,aw,hm,feed,curBat,curPit,curPitStats,curPitLabel,r1,r2,r3,cnt,lastPlay,st,lsd,onDeck,inHole,dueUpIds,battingTeamSide});
 }
 
-async function nextGame(){
-  if(selectedGame<games.length-1){loadMatchup(selectedGame+1)}
-  else{let d=new Date(currentDate+'T12:00:00');d.setDate(d.getDate()+1);currentDate=d.toISOString().slice(0,10);
-    await loadScheduleQuiet();if(games.length>0)loadMatchup(0);else{view='list';renderNav();$('app').innerHTML='<div class="empty">No games on next day</div>'}}
-}
-async function prevGame(){
-  if(selectedGame>0){loadMatchup(selectedGame-1)}
-  else{let d=new Date(currentDate+'T12:00:00');d.setDate(d.getDate()-1);currentDate=d.toISOString().slice(0,10);
-    await loadScheduleQuiet();if(games.length>0)loadMatchup(games.length-1);else{view='list';renderNav();$('app').innerHTML='<div class="empty">No games on previous day</div>'}}
-}
+function renderM(g,d){
+let isL=d.st===‘Live’,isF=d.st===‘Final’;let ls=g.linescore;let lsd=d.lsd;let h=’’;
+// Header
+h+=`<div class="mhdr"><div style="font-size:16px;font-weight:700">${d.aw.team.abbreviation} <span style="color:var(--t4)">@</span> ${d.hm.team.abbreviation}`;
+if(isL&&lsd)h+=`<span class="lb lb-live">${lsd.isTopInning?'▲':'▼'} ${lsd.currentInningOrdinal||''}</span>`;
+else if(isF)h+=`<span class="lb lb-fin">FINAL</span>`;
+h+=`</div><div style="font-size:9px;color:var(--t3)">(${d.aw.leagueRecord?.wins||'?'}-${d.aw.leagueRecord?.losses||'?'}) vs (${d.hm.leagueRecord?.wins||'?'}-${d.hm.leagueRecord?.losses||'?'})</div>`;
+if(ls&&(isL||isF)){let aR=ls.teams?.away?.runs??0,hR=ls.teams?.home?.runs??0;
+h+=`<div style="margin-top:6px;font-family:var(--mono);font-size:28px;font-weight:800">${aR}<span style="color:var(--t4);margin:0 8px">-</span>${hR}</div>`}
+h+=`</div>`;
 
-async function loadScheduleQuiet(){
-  let data=await fetchJ(`${API}/schedule?sportId=1&date=${currentDate}&hydrate=probablePitcher(note),linescore,team`);
-  if(!data?.dates?.[0]){games=[];return}
-  games=data.dates[0].games||[];
-  games.sort((a,b)=>new Date(a.gameDate)-new Date(b.gameDate));
-  await fetchLiveScores();
-}
-
-async function loadSchedule(){
-  view='list';selectedGame=null;filter='ALL';
-  if(refreshTimer)clearInterval(refreshTimer);
-  renderNav();
-  $('subtitle').textContent='LOADING...';
-  $('app').innerHTML='<div class="loader"><div class="spin"></div><div>Fetching games...</div></div>';
-  
-  let data=await fetchJ(`${API}/schedule?sportId=1&date=${currentDate}&hydrate=probablePitcher(note),linescore,team`);
-  if(!data?.dates?.[0]){$('app').innerHTML='<div class="empty">No games found</div>';$('subtitle').textContent='NO GAMES';renderNav();return}
-  games=data.dates[0].games||[];
-  games.sort((a,b)=>new Date(a.gameDate)-new Date(b.gameDate));
-  await fetchLiveScores();
-  
-  let hasLive=games.some(g=>g.status?.abstractGameState==='Live');
-  $('liveDot').className=hasLive?'dot live':'dot';
-  $('subtitle').textContent=`${games.length} GAMES${hasLive?' · LIVE':''}`;
-  renderNav();renderList();
-  
-  if(hasLive){refreshTimer=setInterval(async()=>{
-    let d=await fetchJ(`${API}/schedule?sportId=1&date=${currentDate}&hydrate=probablePitcher(note),linescore,team`);
-    if(d?.dates?.[0]){games=d.dates[0].games;games.sort((a,b)=>new Date(a.gameDate)-new Date(b.gameDate))}
-    await fetchLiveScores();
-    if(view==='list')renderList();
-  },30000)}
+// LIVE HUD
+if(isL&&lsd){
+h+=`<div class="hud">`;
+// Bases + Count
+h+=`<div class="hud-mid">`;
+// Bases diamond
+h+=`<div class="bases"><div class="base b1 ${d.r1?'on':''}"></div><div class="base b2 ${d.r2?'on':''}"></div><div class="base b3 ${d.r3?'on':''}"></div></div>`;
+// Count
+h+=`<div class="count-row">`;
+h+=`<div class="count-dots"><span class="count-label">B</span>`;for(let i=0;i<4;i++)h+=`<div class="cdot ${i<(d.cnt.balls||0)?'b-on':''}"></div>`;h+=`</div>`;
+h+=`<div class="count-dots"><span class="count-label">S</span>`;for(let i=0;i<3;i++)h+=`<div class="cdot ${i<(d.cnt.strikes||0)?'s-on':''}"></div>`;h+=`</div>`;
+h+=`<div class="count-dots"><span class="count-label">O</span>`;for(let i=0;i<3;i++)h+=`<div class="cdot ${i<(d.cnt.outs||lsd.outs||0)?'o-on':''}"></div>`;h+=`</div>`;
+h+=`</div></div>`;
+// Pitcher vs Batter matchup
+h+=`<div class="hud-matchup"><div class="hud-p"><div class="hud-role">PITCHING</div><div class="hud-name">${d.curPitLabel||'—'}</div>`;
+if(d.curPitStats)h+=`<div class="hud-stat">${d.curPitStats.era||'—'} ERA · ${d.curPitStats.strikeOuts||0} K</div>`;
+h+=`</div><div class="hud-b"><div class="hud-role">AT BAT</div>`;
+let batName=’—’;if(d.curBat){let found=[…d.eA,…d.eH].find(b=>b.id==d.curBat);if(found)batName=found.name}
+h+=`<div class="hud-name">${batName}</div></div></div>`;
+h+=`</div>`;
 }
 
-async function fetchLiveScores(){
-  gameLiveData={};
-  let lg=games.filter(g=>g.status?.abstractGameState==='Live'||g.status?.abstractGameState==='Final');
-  await Promise.all(lg.map(async g=>{let f=await fetchJ(`${API}/v1.1/game/${g.gamePk}/feed/live`);if(f)gameLiveData[g.gamePk]=f}));
+// Last play
+if(d.lastPlay&&(isL||isF)){h+=`<div class="last-play"><b>LAST PLAY </b>${d.lastPlay}</div>`}
+
+// Edge notes
+h+=`<div class="edge-box"><b>EDGE </b>${genEdge(g,d.aS,d.hS)}</div>`;
+
+// Linescore
+if(lsd?.innings?.length&&(isL||isF)){let inn=lsd.innings,ci=lsd.currentInning||inn.length,it=lsd.isTopInning;
+h+=`<div class="lsc"><table><thead><tr><th></th>`;inn.forEach((_,i)=>h+=`<th class="${isL&&(i+1)===ci?'ci':''}">${i+1}</th>`);
+h+=`<th class="rhe">R</th><th class="rhe">H</th><th class="rhe">E</th></tr></thead><tbody>`;
+h+=`<tr><td>${d.aw.team.abbreviation}</td>`;inn.forEach((n,i)=>h+=`<td class="${isL&&(i+1)===ci&&it?'ci':''}">${n.away?.runs??'—'}</td>`);
+h+=`<td class="rhe">${ls.teams?.away?.runs??0}</td><td class="rhe">${ls.teams?.away?.hits??0}</td><td class="rhe">${ls.teams?.away?.errors??0}</td></tr>`;
+h+=`<tr><td>${d.hm.team.abbreviation}</td>`;inn.forEach((n,i)=>h+=`<td class="${isL&&(i+1)===ci&&!it?'ci':''}">${n.home?.runs??''}</td>`);
+h+=`<td class="rhe">${ls.teams?.home?.runs??0}</td><td class="rhe">${ls.teams?.home?.hits??0}</td><td class="rhe">${ls.teams?.home?.errors??0}</td></tr></tbody></table></div>`}
+
+// Away team
+h+=`<div class="thdr">${d.aw.team.name||d.aw.team.abbreviation}</div>`;
+h+=rPC(d.ap,d.aS,d.aw.team.abbreviation+’ SP’);
+h+=`<div style="font-size:9px;color:var(--t3);margin:4px 0 2px">Batting vs ${d.hp?.fullName||'TBD'}</div>`;
+h+=rBT(d.eA,d.curBat,isL||isF,d.battingTeamSide===‘away’?d.dueUpIds:new Set());
+h+=`<hr class="divider">`;
+// Home team
+h+=`<div class="thdr">${d.hm.team.name||d.hm.team.abbreviation}</div>`;
+h+=rPC(d.hp,d.hS,d.hm.team.abbreviation+’ SP’);
+h+=`<div style="font-size:9px;color:var(--t3);margin:4px 0 2px">Batting vs ${d.ap?.fullName||'TBD'}</div>`;
+h+=rBT(d.eH,d.curBat,isL||isF,d.battingTeamSide===‘home’?d.dueUpIds:new Set());
+
+h+=`<div class="legend"><span style="color:var(--gold)">■</span> at bat <span class="sky">■</span> due up <span class="grn">■</span> elite <span class="red">■</span> cold <span class="amb">■</span> HR/crusher<br>wOBA from 2026 components. Arrows cycle games. Auto-refreshes when live.</div>`;
+$(‘app’).innerHTML=h;
 }
 
-function getTimeTag(g){let h=new Date(g.gameDate).getHours();if(h<16)return'EARLY';if(h<20)return'MID';return'LATE'}
-
-function renderList(){
-  let filtered=filter==='ALL'?games:games.filter(g=>getTimeTag(g)===filter);
-  let tags=[...new Set(games.map(getTimeTag))];
-  let html='<div class="filters">';
-  html+=`<button class="fbtn ${filter==='ALL'?'on':''}" onclick="setFilter('ALL')">ALL</button>`;
-  tags.forEach(t=>{html+=`<button class="fbtn ${filter===t?'on':''}" onclick="setFilter('${t}')">${t}</button>`});
-  html+='</div>';
-  filtered.forEach(g=>{
-    let idx=games.indexOf(g);
-    let away=g.teams.away,home=g.teams.home;
-    let ap=away.probablePitcher,hp=home.probablePitcher;
-    let time=new Date(g.gameDate).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-    let state=g.status?.abstractGameState||'';
-    let detail=g.status?.detailedState||'';
-    let isLive=state==='Live',isFinal=state==='Final';
-    let ls=g.linescore;
-    html+=`<button class="gcard ${isLive?'live-card':''}" onclick="loadMatchup(${idx})">`;
-    html+=`<div class="top"><div class="teams">${away.team.abbreviation}<span class="at">@</span>${home.team.abbreviation}`;
-    if(isLive)html+=`<span class="live-badge">LIVE</span>`;
-    if(isFinal)html+=`<span class="final-badge">FINAL</span>`;
-    html+=`</div><div class="time">${time}</div></div>`;
-    html+=`<div class="pits">${ap?ap.fullName:'TBD'} vs ${hp?hp.fullName:'TBD'}</div>`;
-    if(ls&&(isLive||isFinal)){
-      let aR=ls.teams?.away?.runs??0,hR=ls.teams?.home?.runs??0;
-      let inn=ls.currentInningOrdinal||'';let half=ls.isTopInning?'Top':'Bot';
-      html+=`<div class="score-line"><div><div class="score-team">${away.team.abbreviation}</div></div><div class="score-num ${isFinal&&aR>hR?'winner':''}">${aR}</div><div class="score-sep">`;
-      if(isLive)html+=`<div class="score-inning">${half} ${inn}</div>`;else html+=`<div style="font-size:9px;color:var(--t3)">${detail}</div>`;
-      html+=`</div><div class="score-num ${isFinal&&hR>aR?'winner':''}">${hR}</div><div style="text-align:right"><div class="score-team">${home.team.abbreviation}</div></div></div>`;
-    }
-    html+=`</button>`;
-  });
-  $('app').innerHTML=html;
+function rPC(p,s,lab){
+if(!p)return`<div class="pc"><div class="lab">${lab}</div><div class="nm" style="color:var(--t3)">TBD</div></div>`;
+let era=s?+s.era:null,fip=cF(s);
+let h=`<div class="pc"><div class="lab">${lab}</div><div class="row"><div><div class="nm">${p.fullName}</div>`;
+h+=`<div class="mt">${s?.wins||0}-${s?.losses||0} · ${s?.inningsPitched||0} IP · ${s?.strikeOuts||0} K · ${fmt(+(s?.whip||0),2)} WHIP</div>`;
+h+=`</div><div style="text-align:right"><div class="el">ERA / FIP</div>`;
+h+=`<div class="ev"><span class="${eC(era)}">${fmt(era,2)}</span><span class="sp">/</span><span class="${eC(fip)}">${fmt(fip,2)}</span></div></div></div></div>`;return h;
 }
 
-function setFilter(f){filter=f;renderList()}
-
-function generateEdge(g,apS,hpS){
-  let away=g.teams.away,home=g.teams.home;
-  let aW=away.leagueRecord?.wins||0,aL=away.leagueRecord?.losses||0;
-  let hW=home.leagueRecord?.wins||0,hL=home.leagueRecord?.losses||0;
-  let ap=away.probablePitcher,hp=home.probablePitcher;
-  let apEra=apS?parseFloat(apS.era):null;
-  let hpEra=hpS?parseFloat(hpS.era):null;
-  let notes=[];
-  
-  // Record-based edge
-  let aPct=aW/(aW+aL||1),hPct=hW/(hW+hL||1);
-  if(aPct>.600)notes.push(`${away.team.abbreviation} hot at ${aW}-${aL}.`);
-  else if(aPct<.400)notes.push(`${away.team.abbreviation} struggling at ${aW}-${aL}.`);
-  if(hPct>.600)notes.push(`${home.team.abbreviation} strong at home, ${hW}-${hL} overall.`);
-  else if(hPct<.400)notes.push(`${home.team.abbreviation} cold at ${hW}-${hL}.`);
-  
-  // Pitching matchup edge
-  if(apEra!=null&&hpEra!=null){
-    let diff=Math.abs(apEra-hpEra);
-    if(diff>1.5){
-      let better=apEra<hpEra?away.team.abbreviation:home.team.abbreviation;
-      let worse=apEra<hpEra?home.team.abbreviation:away.team.abbreviation;
-      notes.push(`Big pitching edge for ${better} — ${Math.min(apEra,hpEra).toFixed(2)} ERA vs ${Math.max(apEra,hpEra).toFixed(2)}.`);
-    }else if(diff<.5){
-      notes.push(`Pitching matchup is tight — both starters within half a run of ERA.`);
-    }
-  }
-  if(apEra!=null&&apEra<2.5)notes.push(`${ap?.fullName} has been dominant (${apEra.toFixed(2)} ERA).`);
-  if(hpEra!=null&&hpEra<2.5)notes.push(`${hp?.fullName} has been dominant (${hpEra.toFixed(2)} ERA).`);
-  if(apEra!=null&&apEra>5.0)notes.push(`${ap?.fullName} has been hittable (${apEra.toFixed(2)} ERA) — look for value on ${home.team.abbreviation}.`);
-  if(hpEra!=null&&hpEra>5.0)notes.push(`${hp?.fullName} has been hittable (${hpEra.toFixed(2)} ERA) — look for value on ${away.team.abbreviation}.`);
-  
-  // K rate insight
-  if(apS&&parseFloat(apS.inningsPitched)>0){let k9=((apS.strikeOuts||0)/parseFloat(apS.inningsPitched))*9;if(k9>10)notes.push(`${ap?.fullName} averaging ${k9.toFixed(1)} K/9 — high-whiff arm.`)}
-  if(hpS&&parseFloat(hpS.inningsPitched)>0){let k9=((hpS.strikeOuts||0)/parseFloat(hpS.inningsPitched))*9;if(k9>10)notes.push(`${hp?.fullName} averaging ${k9.toFixed(1)} K/9 — high-whiff arm.`)}
-  
-  // Home advantage
-  notes.push(`Home team ${home.team.abbreviation} has the lineup advantage batting last.`);
-  
-  if(notes.length>5)notes=notes.slice(0,5);
-  if(notes.length<3)notes.push(`Check lineups closer to first pitch for scratches and weather updates.`);
-  return notes.join(' ');
+function rBT(bat,curBat,sg,dueUp){
+if(!bat?.length)return’<div class="empty">Lineup not posted</div>’;
+let h=`<table class="bt"><thead><tr><th style="text-align:left">#</th><th style="text-align:left">Batter</th><th style="text-align:center">P</th><th>AVG</th><th>OPS</th><th>wOBA</th><th>BvP</th>`;
+if(sg)h+=`<th>H</th><th>AB</th><th>HR</th><th>R</th><th>RBI</th>`;h+=`</tr></thead><tbody>`;
+bat.forEach((b,i)=>{
+let isUp=curBat&&b.id==curBat;let isDue=dueUp.has(b.id);
+h+=`<tr class="${isUp?'at-bat':isDue?'due-up':''}"><td>${i+1}</td><td>${b.name}${isUp?' ◀':isDue?' ●':''}</td><td>${b.pos}</td>`;
+h+=`<td>${b.avg||'—'}</td><td>${b.ops||'—'}</td><td class="${wC(b.woba)}">${fmt(b.woba)}</td><td class="${wC(b.bvpW)}">${b.bvpAB>=3?fmt(b.bvpW):'—'}</td>`;
+if(sg){h+=`<td>${b.gameH!=null?b.gameH:'—'}</td><td>${b.gameAB!=null?b.gameAB:'—'}</td><td class="${b.gameHR>0?'amb':''}">${b.gameHR!=null?b.gameHR:'—'}</td><td>${b.gameR!=null?b.gameR:'—'}</td><td>${b.gameRBI!=null?b.gameRBI:'—'}</td>`}
+h+=`</tr>`});h+=`</tbody></table>`;
+let ws=bat.filter(b=>b.woba!=null).map(b=>b.woba),avg=ws.length?ws.reduce((a,b)=>a+b,0)/ws.length:null;
+let bvps=bat.filter(b=>b.bvpW!=null&&b.bvpAB>=3).map(b=>b.bvpW),ba=bvps.length?bvps.reduce((a,b)=>a+b,0)/bvps.length:null;
+h+=`<div class="ta">Team wOBA: <span class="${wC(avg)}">${fmt(avg)}</span>`;if(ba!=null)h+=` · BvP: <span class="${wC(ba)}">${fmt(ba)}</span>`;h+=`</div>`;return h;
 }
 
-async function loadMatchup(idx){
-  view='detail';selectedGame=idx;
-  let g=games[idx];
-  let away=g.teams.away,home=g.teams.home;
-  let state=g.status?.abstractGameState||'';
-  
-  renderNav();
-  $('app').innerHTML='<div class="loader"><div class="spin"></div><div>Fetching stats...</div><div style="color:var(--t4);font-size:9px;margin-top:4px">10-20 seconds</div></div>';
-  
-  let ap=away.probablePitcher,hp=home.probablePitcher;
-  let [apData,hpData]=await Promise.all([
-    ap?fetchJ(`${API}/people/${ap.id}?hydrate=stats(group=[pitching],type=[season],season=2026)`):null,
-    hp?fetchJ(`${API}/people/${hp.id}?hydrate=stats(group=[pitching],type=[season],season=2026)`):null
-  ]);
-  let apS=apData?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat||null;
-  let hpS=hpData?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat||null;
-  
-  let feed=await fetchJ(`${API}/v1.1/game/${g.gamePk}/feed/live`);
-  if(feed)gameLiveData[g.gamePk]=feed;
-  let box=feed?.liveData?.boxscore;
-  let playData=feed?.liveData?.plays;
-  let currentBatterId=null;
-  if(playData?.currentPlay?.matchup?.batter)currentBatterId=playData.currentPlay.matchup.batter.id;
-  
-  let boxData=await fetchJ(`${API}/game/${g.gamePk}/boxscore`);
-  let awayBatters=[],homeBatters=[];
-  let usedBox=box||boxData;
-  if(usedBox){
-    ['away','home'].forEach(side=>{
-      let info=usedBox.teams[side];
-      let order=info.battingOrder||[];
-      let arr=order.map(id=>{
-        let p=info.players['ID'+id];
-        let gs=p?.stats?.batting||p?.gameStats?.batting||{};
-        return{id,name:p?.person?.fullName||'Unknown',pos:p?.position?.abbreviation||'—',
-          gameH:gs.hits??gs.h,gameAB:gs.atBats??gs.ab,gameR:gs.runs??gs.r,gameRBI:gs.rbi,gameHR:gs.homeRuns??gs.hr,gameBB:gs.baseOnBalls??gs.bb};
-      });
-      if(side==='away')awayBatters=arr;else homeBatters=arr;
-    });
-  }
-  if(awayBatters.length===0){let r=await fetchJ(`${API}/teams/${away.team.id}/roster?rosterType=active`);if(r?.roster)awayBatters=r.roster.filter(p=>['Hitter','Outfielder','Infielder','Catcher'].includes(p.position.type)).slice(0,9).map(p=>({id:p.person.id,name:p.person.fullName,pos:p.position.abbreviation}))}
-  if(homeBatters.length===0){let r=await fetchJ(`${API}/teams/${home.team.id}/roster?rosterType=active`);if(r?.roster)homeBatters=r.roster.filter(p=>['Hitter','Outfielder','Infielder','Catcher'].includes(p.position.type)).slice(0,9).map(p=>({id:p.person.id,name:p.person.fullName,pos:p.position.abbreviation}))}
-  
-  async function enrichBatters(batters,oppPid){
-    return Promise.all(batters.map(async b=>{
-      let [pD,bvpD]=await Promise.all([
-        fetchJ(`${API}/people/${b.id}?hydrate=stats(group=[hitting],type=[season],season=2026)`),
-        oppPid?fetchJ(`${API}/people/${b.id}/stats?stats=vsPlayer&opposingPlayerId=${oppPid}&group=hitting&sportId=1`):null
-      ]);
-      let ss=pD?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat||null;
-      let bvpSplits=bvpD?.stats?.[0]?.splits||[];
-      let bvpC=null;
-      if(bvpSplits.length>0){bvpC={};bvpSplits.forEach(sp=>{let s=sp.stat;Object.keys(s).forEach(k=>{if(typeof s[k]==='number')bvpC[k]=(bvpC[k]||0)+s[k]})})}
-      return{...b,avg:ss?.avg||null,ops:ss?.ops||null,woba:calcWOBA(ss),bvpWoba:calcWOBA(bvpC),bvpAB:bvpC?.atBats||0};
-    }));
-  }
-  let [eAway,eHome]=await Promise.all([enrichBatters(awayBatters,hp?.id),enrichBatters(homeBatters,ap?.id)]);
-  
-  renderMatchup(g,{apS,hpS,ap,hp,eAway,eHome,away,home,feed,currentBatterId,state});
-}
-
-function renderMatchup(g,d){
-  let isLive=d.state==='Live',isFinal=d.state==='Final';
-  let ls=g.linescore;let lsData=d.feed?.liveData?.linescore;
-  let html='';
-  
-  // Header
-  html+=`<div class="matchup-hdr"><div class="vs">${d.away.team.abbreviation} <span style="color:var(--t4)">@</span> ${d.home.team.abbreviation}`;
-  if(isLive)html+=`<span class="live-badge">LIVE</span>`;
-  if(isFinal)html+=`<span class="final-badge">FINAL</span>`;
-  html+=`</div>`;
-  html+=`<div class="rec">(${d.away.leagueRecord?.wins||'?'}-${d.away.leagueRecord?.losses||'?'}) vs (${d.home.leagueRecord?.wins||'?'}-${d.home.leagueRecord?.losses||'?'})</div>`;
-  let time=new Date(g.gameDate).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
-  html+=`<div class="gtime">${time}</div>`;
-  if(ls&&(isLive||isFinal)){
-    let aR=ls.teams?.away?.runs??0,hR=ls.teams?.home?.runs??0;
-    html+=`<div style="margin-top:8px;font-family:var(--mono);font-size:28px;font-weight:800;letter-spacing:2px"><span class="${isFinal&&aR>hR?'grn':''}">${aR}</span><span style="color:var(--t4);margin:0 8px">-</span><span class="${isFinal&&hR>aR?'grn':''}">${hR}</span></div>`;
-    if(isLive&&lsData){html+=`<div style="color:var(--lime);font-size:11px;margin-top:2px">${lsData.isTopInning?'Top':'Bot'} ${lsData.currentInningOrdinal||''} · ${lsData.outs||0} out</div>`}
-  }
-  html+=`</div>`;
-  
-  // Edge notes
-  let edge=generateEdge(g,d.apS,d.hpS);
-  html+=`<div class="edge-box"><b>EDGE NOTES </b>${edge}</div>`;
-  
-  // Linescore
-  if(lsData?.innings?.length>0&&(isLive||isFinal)){
-    let innings=lsData.innings;let curInn=lsData.currentInning||innings.length;let isTop=lsData.isTopInning;
-    html+=`<div class="linescore"><table><thead><tr><th></th>`;
-    innings.forEach((inn,i)=>{html+=`<th class="${isLive&&(i+1)===curInn?'cur-inn':''}">${i+1}</th>`});
-    html+=`<th class="rhe">R</th><th class="rhe">H</th><th class="rhe">E</th></tr></thead><tbody>`;
-    html+=`<tr><td>${d.away.team.abbreviation}</td>`;
-    innings.forEach((inn,i)=>{html+=`<td class="${isLive&&(i+1)===curInn&&isTop?'cur-inn':''}">${inn.away?.runs??'—'}</td>`});
-    html+=`<td class="rhe">${ls.teams?.away?.runs??0}</td><td class="rhe">${ls.teams?.away?.hits??0}</td><td class="rhe">${ls.teams?.away?.errors??0}</td></tr>`;
-    html+=`<tr><td>${d.home.team.abbreviation}</td>`;
-    innings.forEach((inn,i)=>{html+=`<td class="${isLive&&(i+1)===curInn&&!isTop?'cur-inn':''}">${inn.home?.runs??''}</td>`});
-    html+=`<td class="rhe">${ls.teams?.home?.runs??0}</td><td class="rhe">${ls.teams?.home?.hits??0}</td><td class="rhe">${ls.teams?.home?.errors??0}</td></tr>`;
-    html+=`</tbody></table></div>`;
-  }
-  
-  // Away team
-  html+=`<div class="team-hdr">${d.away.team.name||d.away.team.abbreviation}</div>`;
-  html+=renderPitcherCard(d.ap,d.apS,d.away.team.abbreviation+' SP');
-  html+=`<div style="font-size:9px;color:var(--t3);margin:4px 0 2px">Batting vs ${d.hp?.fullName||'TBD'} (${d.home.team.abbreviation})</div>`;
-  html+=renderBatterTable(d.eAway,d.currentBatterId,isLive||isFinal);
-  
-  html+=`<hr class="divider">`;
-  
-  // Home team
-  html+=`<div class="team-hdr">${d.home.team.name||d.home.team.abbreviation}</div>`;
-  html+=renderPitcherCard(d.hp,d.hpS,d.home.team.abbreviation+' SP');
-  html+=`<div style="font-size:9px;color:var(--t3);margin:4px 0 2px">Batting vs ${d.ap?.fullName||'TBD'} (${d.away.team.abbreviation})</div>`;
-  html+=renderBatterTable(d.eHome,d.currentBatterId,isLive||isFinal);
-  
-  html+=`<div class="legend"><span class="grn">■</span> elite <span class="red">■</span> cold <span class="amb">■</span> crusher/HR <span class="sky">■</span> owned · <span style="color:var(--lime)">■</span> at bat<br>wOBA from 2026 components. FIP from K/BB/HR/IP. BvP = career vs pitcher. Swipe arrows to cycle games.</div>`;
-  $('app').innerHTML=html;
-}
-
-function renderPitcherCard(p,stats,label){
-  if(!p)return`<div class="pcard"><div class="lab">${label}</div><div class="name" style="color:var(--t3)">TBD</div></div>`;
-  let era=stats?parseFloat(stats.era):null;let fip=calcFIP(stats);
-  let html=`<div class="pcard"><div class="lab">${label}</div><div class="row"><div>`;
-  html+=`<div class="name">${p.fullName}</div>`;
-  html+=`<div class="meta">${stats?.wins||0}-${stats?.losses||0} · ${stats?.inningsPitched||0} IP · ${stats?.strikeOuts||0} K · ${fmt(parseFloat(stats?.whip||0),2)} WHIP</div>`;
-  html+=`</div><div style="text-align:right"><div class="era-label">ERA / FIP</div>`;
-  html+=`<div class="era-vals"><span class="${eC(era)}">${fmt(era,2)}</span><span class="sep">/</span><span class="${eC(fip)}">${fmt(fip,2)}</span></div>`;
-  html+=`</div></div></div>`;return html;
-}
-
-function renderBatterTable(batters,currentBatterId,showGame){
-  if(!batters||batters.length===0)return'<div class="empty">Lineup not posted yet</div>';
-  let html=`<table class="bt"><thead><tr><th style="text-align:left">#</th><th style="text-align:left">Batter</th><th style="text-align:center">P</th><th>AVG</th><th>OPS</th><th>wOBA</th><th>BvP</th>`;
-  if(showGame)html+=`<th>H</th><th>AB</th><th>HR</th><th>R</th><th>RBI</th>`;
-  html+=`</tr></thead><tbody>`;
-  batters.forEach((b,i)=>{
-    let isUp=currentBatterId&&b.id==currentBatterId;
-    html+=`<tr class="${isUp?'at-bat':''}"><td>${i+1}</td><td>${b.name}${isUp?' ◀':''}</td><td>${b.pos}</td>`;
-    html+=`<td>${b.avg||'—'}</td><td>${b.ops||'—'}</td>`;
-    html+=`<td class="${wC(b.woba)}">${fmt(b.woba)}</td>`;
-    html+=`<td class="${wC(b.bvpWoba)}">${b.bvpAB>=3?fmt(b.bvpWoba):'—'}</td>`;
-    if(showGame){
-      html+=`<td>${b.gameH!=null?b.gameH:'—'}</td><td>${b.gameAB!=null?b.gameAB:'—'}</td>`;
-      html+=`<td class="${b.gameHR>0?'amb':''}">${b.gameHR!=null?b.gameHR:'—'}</td>`;
-      html+=`<td>${b.gameR!=null?b.gameR:'—'}</td><td>${b.gameRBI!=null?b.gameRBI:'—'}</td>`;
-    }
-    html+=`</tr>`;
-  });
-  html+=`</tbody></table>`;
-  let ws=batters.filter(b=>b.woba!=null).map(b=>b.woba);
-  let avg=ws.length?ws.reduce((a,b)=>a+b,0)/ws.length:null;
-  let bvps=batters.filter(b=>b.bvpWoba!=null&&b.bvpAB>=3).map(b=>b.bvpWoba);
-  let bavg=bvps.length?bvps.reduce((a,b)=>a+b,0)/bvps.length:null;
-  html+=`<div class="tm-avg">Team wOBA: <span class="${wC(avg)}">${fmt(avg)}</span>`;
-  if(bavg!=null)html+=` · BvP: <span class="${wC(bavg)}">${fmt(bavg)}</span>`;
-  html+=`</div>`;return html;
-}
-
-function backToList(){view='list';renderNav();renderList()}
-loadSchedule();
+function backToList(){view=‘list’;rNav();rList()}
+loadSch();
 </script>
 
 </body>
