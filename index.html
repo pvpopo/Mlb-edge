@@ -228,8 +228,8 @@ function setFilter(f){filter=f;renderList()}
 
 function generateEdge(g,apS,hpS){
   let away=g.teams.away,home=g.teams.home;
-  let aW=away.team.record?.wins||0,aL=away.team.record?.losses||0;
-  let hW=home.team.record?.wins||0,hL=home.team.record?.losses||0;
+  let aW=away.leagueRecord?.wins||0,aL=away.leagueRecord?.losses||0;
+  let hW=home.leagueRecord?.wins||0,hL=home.leagueRecord?.losses||0;
   let ap=away.probablePitcher,hp=home.probablePitcher;
   let apEra=apS?parseFloat(apS.era):null;
   let hpEra=hpS?parseFloat(hpS.era):null;
@@ -341,7 +341,7 @@ function renderMatchup(g,d){
   if(isLive)html+=`<span class="live-badge">LIVE</span>`;
   if(isFinal)html+=`<span class="final-badge">FINAL</span>`;
   html+=`</div>`;
-  html+=`<div class="rec">(${d.away.team.record?.wins||'?'}-${d.away.team.record?.losses||'?'}) vs (${d.home.team.record?.wins||'?'}-${d.home.team.record?.losses||'?'})</div>`;
+  html+=`<div class="rec">(${d.away.leagueRecord?.wins||'?'}-${d.away.leagueRecord?.losses||'?'}) vs (${d.home.leagueRecord?.wins||'?'}-${d.home.leagueRecord?.losses||'?'})</div>`;
   let time=new Date(g.gameDate).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
   html+=`<div class="gtime">${time}</div>`;
   if(ls&&(isLive||isFinal)){
@@ -372,16 +372,16 @@ function renderMatchup(g,d){
   
   // Away team
   html+=`<div class="team-hdr">${d.away.team.name||d.away.team.abbreviation}</div>`;
-  html+=`<div class="team-vs">vs ${d.hp?.fullName||'TBD'} (${d.home.team.abbreviation})</div>`;
-  html+=renderPitcherCard(d.hp,d.hpS,d.home.team.abbreviation+' SP');
+  html+=renderPitcherCard(d.ap,d.apS,d.away.team.abbreviation+' SP');
+  html+=`<div style="font-size:9px;color:var(--t3);margin:4px 0 2px">Batting vs ${d.hp?.fullName||'TBD'} (${d.home.team.abbreviation})</div>`;
   html+=renderBatterTable(d.eAway,d.currentBatterId,isLive||isFinal);
   
   html+=`<hr class="divider">`;
   
   // Home team
   html+=`<div class="team-hdr">${d.home.team.name||d.home.team.abbreviation}</div>`;
-  html+=`<div class="team-vs">vs ${d.ap?.fullName||'TBD'} (${d.away.team.abbreviation})</div>`;
-  html+=renderPitcherCard(d.ap,d.apS,d.away.team.abbreviation+' SP');
+  html+=renderPitcherCard(d.hp,d.hpS,d.home.team.abbreviation+' SP');
+  html+=`<div style="font-size:9px;color:var(--t3);margin:4px 0 2px">Batting vs ${d.ap?.fullName||'TBD'} (${d.away.team.abbreviation})</div>`;
   html+=renderBatterTable(d.eHome,d.currentBatterId,isLive||isFinal);
   
   html+=`<div class="legend"><span class="grn">■</span> elite <span class="red">■</span> cold <span class="amb">■</span> crusher/HR <span class="sky">■</span> owned · <span style="color:var(--lime)">■</span> at bat<br>wOBA from 2026 components. FIP from K/BB/HR/IP. BvP = career vs pitcher. Swipe arrows to cycle games.</div>`;
