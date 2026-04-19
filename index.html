@@ -81,39 +81,58 @@ let savant = {}; // player_id -> {xba, xslg, xwoba, ev, brl}
 
 // --- Savant CSV loader ---
 async function loadSavant() {
+  // Fetch BOTH leaderboards in parallel
   try {
-    let r = await fetch('https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=2026&position=&team=&min=10&csv=true');
-    if (!r.ok) { console.warn('Savant fetch failed:', r.status); return; }
-    let text = await r.text();
-    let lines = text.split('\n');
-    if (lines.length < 2) return;
-    let headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-    let piCol = headers.indexOf('player_id');
-    let xbaCol = headers.indexOf('est_ba');
-    let xslgCol = headers.indexOf('est_slg');
-    let xwobaCol = headers.indexOf('est_woba');
-    let evCol = headers.indexOf('avg_hit_speed');
-    let brlCol = headers.indexOf('brl_percent');
-    // Fallback column names
-    if (xbaCol < 0) xbaCol = headers.indexOf('xba');
-    if (xslgCol < 0) xslgCol = headers.indexOf('xslg');
-    if (xwobaCol < 0) xwobaCol = headers.indexOf('xwoba');
-    if (piCol < 0) { console.warn('Savant CSV: no player_id column. Headers:', headers); return; }
-    for (let i = 1; i < lines.length; i++) {
-      if (!lines[i].trim()) continue;
-      let cols = lines[i].split(',').map(c => c.trim().replace(/"/g, ''));
-      let pid = cols[piCol];
-      if (!pid) continue;
-      savant[pid] = {
-        xba: xbaCol >= 0 ? cols[xbaCol] : null,
-        xslg: xslgCol >= 0 ? cols[xslgCol] : null,
-        xwoba: xwobaCol >= 0 ? cols[xwobaCol] : null,
-        ev: evCol >= 0 ? cols[evCol] : null,
-        brl: brlCol >= 0 ? cols[brlCol] : null
-      };
+    let [r1, r2] = await Promise.all([
+      fetch('https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=2026&position=&team=&min=10&csv=true').catch(()=>null),
+      fetch('https://baseballsavant.mlb.com/leaderboard/statcast?type=batter&year=2026&position=&team=&min=q&csv=true').catch(()=>null)
+    ]);
+
+    // Parse expected stats (xBA, xSLG, xwOBA)
+    if (r1 && r1.ok) {
+      let text = await r1.text();
+      parseCSV(text, (headers, cols, pid) => {
+        if (!savant[pid]) savant[pid] = {};
+        savant[pid].xba = findCol(headers, cols, ['est_ba','xba','expected_ba']);
+        savant[pid].xslg = findCol(headers, cols, ['est_slg','xslg','expected_slg']);
+        savant[pid].xwoba = findCol(headers, cols, ['est_woba','xwoba','expected_woba']);
+      });
     }
+
+    // Parse statcast (EV, barrel rate)
+    if (r2 && r2.ok) {
+      let text = await r2.text();
+      parseCSV(text, (headers, cols, pid) => {
+        if (!savant[pid]) savant[pid] = {};
+        savant[pid].ev = findCol(headers, cols, ['avg_hit_speed','exit_velocity','avg_exit_velocity','ev','launch_speed']);
+        savant[pid].brl = findCol(headers, cols, ['brl_percent','barrel_batted_rate','brl_pa','barrel_pct','barrels_per_pa_percent']);
+      });
+    }
+
     console.log('Savant loaded:', Object.keys(savant).length, 'players');
   } catch(e) { console.warn('Savant error:', e); }
+}
+
+function parseCSV(text, callback) {
+  let lines = text.split('\n');
+  if (lines.length < 2) return;
+  let headers = lines[0].split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
+  let piCol = headers.indexOf('player_id');
+  if (piCol < 0) { console.warn('No player_id column. Headers:', headers.join(', ')); return; }
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    let cols = lines[i].split(',').map(c => c.trim().replace(/"/g, ''));
+    let pid = cols[piCol];
+    if (pid) callback(headers, cols, pid);
+  }
+}
+
+function findCol(headers, cols, names) {
+  for (let name of names) {
+    let idx = headers.indexOf(name.toLowerCase());
+    if (idx >= 0 && cols[idx] && cols[idx] !== '' && cols[idx] !== 'null') return cols[idx];
+  }
+  return null;
 }
 
 // --- Helpers ---
@@ -422,7 +441,7 @@ async function openGame(i) {
     html += '<div style="font-size:9px;color:#52525b;margin:4px 0 2px">Batting vs '+(ap?.fullName||'TBD')+'</div>';
     html += batterTable(enrichedHm, curBatId, isL||isF);
 
-    html += '<div class="leg"><span class="amb">■</span> at bat/HR <span class="grn">■</span> elite wOBA <span class="red">■</span> cold wOBA <span style="color:#c084fc">■</span> Statcast (xwOBA, EV 90+, Brl% 8+)<br>wOBA from 2026 season. xwOBA/EV/Brl% from Baseball Savant. FIP from K/BB/HR/IP. Arrows cycle games.</div>';
+    html += '<div class="leg"><b>Colors:</b> <span class="grn">Green</span> = wOBA .340+ (elite) · <span class="red">Red</span> = wOBA under .300 (cold) · <span class="amb">Amber</span> = wOBA .370+ (crusher) or HR hit · <span style="color:#c084fc">Purple</span> = Statcast highlight (EV 90+ mph or Brl% 8%+)<br><br><b>Columns:</b> wOBA = 2026 season weighted on-base. xwOBA = Savant expected wOBA (luck-adjusted). EV = avg exit velocity. Brl% = barrel rate. FIP = fielding-independent pitching.<br>Arrows cycle games across days.</div>';
     $('app').innerHTML = html;
 
   } catch(e) {
