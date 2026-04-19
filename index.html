@@ -56,13 +56,17 @@ table.bt tr.ab td:nth-child(2){color:#fbbf24;font-weight:700}
 .loader{text-align:center;padding:50px 0;color:#52525b;font-size:11px}
 .spin{display:inline-block;width:18px;height:18px;border:2px solid #3f3f46;border-top-color:#f59e0b;border-radius:50%;animation:s .6s linear infinite;margin-bottom:8px}
 @keyframes s{to{transform:rotate(360deg)}}
+.pbar-wrap{width:80%;max-width:280px;margin:12px auto 6px;background:#1a1a1d;border-radius:6px;height:6px;overflow:hidden}
+.pbar{height:100%;background:linear-gradient(90deg,#f59e0b,#fbbf24);border-radius:6px;transition:width .3s ease}
+.pstep{font-size:10px;color:#a1a1aa;margin-top:4px}
+.pest{font-size:9px;color:#3f3f46;margin-top:2px}
 .err{text-align:center;padding:30px;color:#f87171;font-size:11px}
 .err button{margin-top:10px;background:#111;border:1px solid #27272a;color:#a1a1aa;border-radius:8px;padding:8px 20px;font-size:11px}
 </style>
 
 </head>
 <body>
-<div class="hdr"><h1>⚾ MLB Edge</h1><button class="ref" onclick="load()">↻ Refresh</button></div>
+<div class="hdr"><h1>⚾ MLB Edge</h1><button class="ref" onclick="refresh()">↻ Refresh</button></div>
 <div class="sub" id="sub">LOADING...</div>
 <div id="nav"></div>
 <div id="app"></div>
@@ -71,11 +75,69 @@ table.bt tr.ab td:nth-child(2){color:#fbbf24;font-weight:700}
 const BASE = 'https://statsapi.mlb.com';
 let date = new Date().toISOString().slice(0,10);
 let games = [];
-let sel = null; // selected game index
-let mode = 'list'; // 'list' or 'detail'
+let sel = null;
+let mode = 'list';
+let savant = {}; // player_id -> {xba, xslg, xwoba, ev, brl}
+
+// --- Savant CSV loader ---
+async function loadSavant() {
+  try {
+    let r = await fetch('https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=2026&position=&team=&min=10&csv=true');
+    if (!r.ok) { console.warn('Savant fetch failed:', r.status); return; }
+    let text = await r.text();
+    let lines = text.split('\n');
+    if (lines.length < 2) return;
+    let headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    let piCol = headers.indexOf('player_id');
+    let xbaCol = headers.indexOf('est_ba');
+    let xslgCol = headers.indexOf('est_slg');
+    let xwobaCol = headers.indexOf('est_woba');
+    let evCol = headers.indexOf('avg_hit_speed');
+    let brlCol = headers.indexOf('brl_percent');
+    // Fallback column names
+    if (xbaCol < 0) xbaCol = headers.indexOf('xba');
+    if (xslgCol < 0) xslgCol = headers.indexOf('xslg');
+    if (xwobaCol < 0) xwobaCol = headers.indexOf('xwoba');
+    if (piCol < 0) { console.warn('Savant CSV: no player_id column. Headers:', headers); return; }
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      let cols = lines[i].split(',').map(c => c.trim().replace(/"/g, ''));
+      let pid = cols[piCol];
+      if (!pid) continue;
+      savant[pid] = {
+        xba: xbaCol >= 0 ? cols[xbaCol] : null,
+        xslg: xslgCol >= 0 ? cols[xslgCol] : null,
+        xwoba: xwobaCol >= 0 ? cols[xwobaCol] : null,
+        ev: evCol >= 0 ? cols[evCol] : null,
+        brl: brlCol >= 0 ? cols[brlCol] : null
+      };
+    }
+    console.log('Savant loaded:', Object.keys(savant).length, 'players');
+  } catch(e) { console.warn('Savant error:', e); }
+}
 
 // --- Helpers ---
 function $(id) { return document.getElementById(id); }
+
+function showLoading(step, total, label, estSec) {
+  let pct = Math.round((step / total) * 100);
+  let remaining = Math.max(0, Math.round(estSec * (1 - step/total)));
+  $('app').innerHTML = '<div class="loader"><div class="spin"></div>' +
+    '<div class="pbar-wrap"><div class="pbar" style="width:'+pct+'%"></div></div>' +
+    '<div class="pstep">'+label+'</div>' +
+    '<div class="pest">'+pct+'% · ~'+remaining+'s remaining</div></div>';
+}
+
+function updateProgress(step, total, label, estSec) {
+  let pct = Math.round((step / total) * 100);
+  let remaining = Math.max(0, Math.round(estSec * (1 - step/total)));
+  let bar = document.querySelector('.pbar');
+  let stepEl = document.querySelector('.pstep');
+  let estEl = document.querySelector('.pest');
+  if (bar) bar.style.width = pct + '%';
+  if (stepEl) stepEl.textContent = label;
+  if (estEl) estEl.textContent = pct + '% · ~' + remaining + 's remaining';
+}
 function fmt(v, d) { return v == null || isNaN(+v) ? '—' : (+v).toFixed(d || 3); }
 function wColor(w) { if (w == null) return 't2'; let n = +w; return n > .37 ? 'amb' : n > .34 ? 'grn' : n < .26 ? 'sky' : n < .30 ? 'red' : 't2'; }
 function eColor(v) { if (v == null) return 't2'; let n = +v; return n < 3.5 ? 'grn' : n > 4.5 ? 'red' : 't2'; }
@@ -152,9 +214,21 @@ async function loadGamesQuiet() {
 async function load() {
   mode = 'list'; sel = null; renderNav();
   $('sub').textContent = 'LOADING...';
-  $('app').innerHTML = '<div class="loader"><div class="spin"></div><br>Fetching schedule...</div>';
+  let hasSavant = Object.keys(savant).length > 0;
+  let totalSteps = hasSavant ? 2 : 3;
+  showLoading(0, totalSteps, 'Fetching MLB schedule...', hasSavant ? 3 : 6);
 
+  // Step 1: Schedule
   let data = await api('/api/v1/schedule?sportId=1&date=' + date + '&hydrate=probablePitcher,linescore,team');
+  updateProgress(1, totalSteps, 'Schedule loaded', hasSavant ? 3 : 6);
+
+  // Step 2: Savant (if not cached)
+  if (!hasSavant) {
+    updateProgress(1, totalSteps, 'Downloading Savant Statcast data...', 6);
+    await loadSavant();
+    updateProgress(2, totalSteps, 'Savant loaded', 6);
+  }
+
   if (!data || !data.dates || !data.dates[0]) {
     $('app').innerHTML = '<div class="err">No games found<br><button onclick="load()">Retry</button></div>';
     $('sub').textContent = 'NO GAMES';
@@ -163,7 +237,8 @@ async function load() {
   }
   games = data.dates[0].games || [];
   games.sort((a,b) => new Date(a.gameDate) - new Date(b.gameDate));
-  $('sub').textContent = games.length + ' GAMES';
+  let svCount = Object.keys(savant).length;
+  $('sub').textContent = games.length + ' GAMES' + (svCount ? ' · SAVANT ✓' : '');
   renderNav();
   renderList();
 }
@@ -199,7 +274,9 @@ async function openGame(i) {
   mode = 'detail'; sel = i;
   renderNav();
   let g = games[i];
-  $('app').innerHTML = '<div class="loader"><div class="spin"></div><br>Loading matchup...</div>';
+  let totalBatters = 18; // estimate
+  let totalSteps = 3 + totalBatters; // pitchers + feed + batters
+  showLoading(0, totalSteps, 'Fetching pitcher stats...', 15);
 
   try {
     let aw = g.teams.away, hm = g.teams.home;
@@ -208,21 +285,22 @@ async function openGame(i) {
     let isF = g.status?.abstractGameState === 'Final';
     let ls = g.linescore;
 
-    // Fetch pitcher season stats (2 calls)
+    // Step 1-2: Fetch pitcher season stats
     let [apData, hpData] = await Promise.all([
       ap ? api('/api/v1/people/'+ap.id+'?hydrate=stats(group=[pitching],type=[season],season=2026)') : null,
       hp ? api('/api/v1/people/'+hp.id+'?hydrate=stats(group=[pitching],type=[season],season=2026)') : null
     ]);
     let apS = apData?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat || null;
     let hpS = hpData?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat || null;
+    updateProgress(2, totalSteps, 'Pitchers loaded · Fetching lineup...', 15);
 
-    // Fetch batter season stats per-player from boxscore batting order
-    // First get the lineup from the game feed
+    // Step 3: Live feed
     let feed = await api('/api/v1.1/game/'+g.gamePk+'/feed/live');
     let box = feed?.liveData?.boxscore;
     let plays = feed?.liveData?.plays;
     let lsd = feed?.liveData?.linescore;
     let curBatId = plays?.currentPlay?.matchup?.batter?.id || null;
+    updateProgress(3, totalSteps, 'Lineup loaded · Fetching batter stats...', 15);
 
     // Extract batting order IDs and basic info from boxscore
     function getLineup(side) {
@@ -256,18 +334,26 @@ async function openGame(i) {
       if (r?.roster) hmBat = r.roster.filter(p=>p.position?.type!=='Pitcher').slice(0,9).map(p=>({id:p.person.id,name:p.person.fullName,pos:p.position.abbreviation}));
     }
 
-    // Fetch season stats for each batter (this is slower but works reliably)
+    // Fetch season stats for each batter with progress tracking
+    let allBatters = [...awBat, ...hmBat];
+    totalSteps = 3 + allBatters.length;
+    let completed = 3;
+
     async function enrichBatter(b) {
       let data = await api('/api/v1/people/'+b.id+'?hydrate=stats(group=[hitting],type=[season],season=2026)');
       let ss = data?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat || null;
-      return { ...b, avg: ss?.avg||null, ops: ss?.ops||null, woba: calcWOBA(ss) };
+      let sv = savant[b.id] || null;
+      completed++;
+      updateProgress(completed, totalSteps, 'Loading ' + b.name + '... (' + completed + '/' + totalSteps + ')', 15);
+      return { ...b, avg: ss?.avg||null, ops: ss?.ops||null, woba: calcWOBA(ss),
+        xba: sv?.xba||null, xslg: sv?.xslg||null, xwoba: sv?.xwoba||null,
+        ev: sv?.ev||null, brl: sv?.brl||null };
     }
 
-    // Run all batter fetches in parallel
-    let [enrichedAw, enrichedHm] = await Promise.all([
-      Promise.all(awBat.map(enrichBatter)),
-      Promise.all(hmBat.map(enrichBatter))
-    ]);
+    // Run ALL batter fetches in parallel across both teams
+    let allResults = await Promise.all(allBatters.map(enrichBatter));
+    let enrichedAw = allResults.slice(0, awBat.length);
+    let enrichedHm = allResults.slice(awBat.length);
 
     // Edge notes
     let aW=aw.leagueRecord?.wins||0, aL=aw.leagueRecord?.losses||0;
@@ -336,7 +422,7 @@ async function openGame(i) {
     html += '<div style="font-size:9px;color:#52525b;margin:4px 0 2px">Batting vs '+(ap?.fullName||'TBD')+'</div>';
     html += batterTable(enrichedHm, curBatId, isL||isF);
 
-    html += '<div class="leg"><span class="amb">■</span> at bat/HR <span class="grn">■</span> elite wOBA <span class="red">■</span> cold wOBA<br>wOBA from 2026 season components. FIP from K/BB/HR/IP. Arrows cycle games across days.</div>';
+    html += '<div class="leg"><span class="amb">■</span> at bat/HR <span class="grn">■</span> elite wOBA <span class="red">■</span> cold wOBA <span style="color:#c084fc">■</span> Statcast (xwOBA, EV 90+, Brl% 8+)<br>wOBA from 2026 season. xwOBA/EV/Brl% from Baseball Savant. FIP from K/BB/HR/IP. Arrows cycle games.</div>';
     $('app').innerHTML = html;
 
   } catch(e) {
@@ -354,7 +440,9 @@ function pitcherCard(p, s, label) {
 
 function batterTable(batters, curBatId, showGame) {
   if (!batters || !batters.length) return '<p style="text-align:center;color:#3f3f46;padding:10px;font-size:10px">Lineup not posted</p>';
-  let html = '<table class="bt"><thead><tr><th style="text-align:left">#</th><th style="text-align:left">Batter</th><th style="text-align:center">P</th><th>AVG</th><th>OPS</th><th>wOBA</th>';
+  let hasSavant = batters.some(b => b.xwoba);
+  let html = '<div style="overflow-x:auto"><table class="bt"><thead><tr><th style="text-align:left">#</th><th style="text-align:left">Batter</th><th style="text-align:center">P</th><th>AVG</th><th>OPS</th><th>wOBA</th>';
+  if (hasSavant) html += '<th style="color:#c084fc">xwOBA</th><th style="color:#c084fc">EV</th><th style="color:#c084fc">Brl%</th>';
   if (showGame) html += '<th>H</th><th>AB</th><th>HR</th><th>R</th><th>RBI</th>';
   html += '</tr></thead><tbody>';
   batters.forEach((b, i) => {
@@ -362,6 +450,12 @@ function batterTable(batters, curBatId, showGame) {
     html += '<tr class="'+(isUp?'ab':'')+'"><td>'+(i+1)+'</td><td>'+b.name+(isUp?' ◀':'')+'</td><td>'+b.pos+'</td>';
     html += '<td>'+(b.avg||'—')+'</td><td>'+(b.ops||'—')+'</td>';
     html += '<td class="'+wColor(b.woba)+'">'+fmt(b.woba)+'</td>';
+    if (hasSavant) {
+      let xw = b.xwoba ? +b.xwoba : null;
+      html += '<td class="'+wColor(xw)+'">'+(b.xwoba||'—')+'</td>';
+      html += '<td style="color:'+(b.ev&&+b.ev>=90?'#c084fc':'#a1a1aa')+'">'+(b.ev||'—')+'</td>';
+      html += '<td style="color:'+(b.brl&&+b.brl>=8?'#c084fc':'#a1a1aa')+'">'+(b.brl?b.brl+'%':'—')+'</td>';
+    }
     if (showGame) {
       html += '<td>'+(b.gH!=null?b.gH:'—')+'</td>';
       html += '<td>'+(b.gAB!=null?b.gAB:'—')+'</td>';
@@ -371,11 +465,20 @@ function batterTable(batters, curBatId, showGame) {
     }
     html += '</tr>';
   });
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
   let ws = batters.map(b=>b.woba).filter(w=>w!=null);
   let avg = ws.length ? ws.reduce((a,b)=>a+b,0)/ws.length : null;
-  html += '<div style="font-size:9px;color:#52525b;margin-top:4px">Team wOBA: <span class="'+wColor(avg)+'" style="font-family:monospace">'+fmt(avg)+'</span></div>';
+  let xws = batters.map(b=>b.xwoba?+b.xwoba:null).filter(w=>w!=null);
+  let xavg = xws.length ? xws.reduce((a,b)=>a+b,0)/xws.length : null;
+  html += '<div style="font-size:9px;color:#52525b;margin-top:4px">Team wOBA: <span class="'+wColor(avg)+'" style="font-family:monospace">'+fmt(avg)+'</span>';
+  if (xavg != null) html += ' · xwOBA: <span class="'+wColor(xavg)+'" style="font-family:monospace">'+fmt(xavg)+'</span>';
+  html += '</div>';
   return html;
+}
+
+function refresh() {
+  if (mode === 'detail' && sel !== null) { openGame(sel); }
+  else { load(); }
 }
 
 // Start
