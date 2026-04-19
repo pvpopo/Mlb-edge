@@ -34,8 +34,11 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
 
 /* Matchup detail */
 .mhdr{background:#111;border:1px solid #27272a;border-radius:10px;padding:10px;text-align:center;margin-bottom:8px}
-.edge{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.15);border-radius:8px;padding:8px;margin-bottom:10px;font-size:10px;color:rgba(245,158,11,.85);line-height:1.5}
-.edge b{color:#f59e0b;font-size:9px;letter-spacing:1px}
+.edge{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.15);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:10px;color:rgba(245,158,11,.85);line-height:1.5}
+.edge summary{list-style:none}
+.edge summary::-webkit-details-marker{display:none}
+.edge[open] summary{margin-bottom:2px}
+.edge p{margin:0}
 .pcard{background:#111;border:1px solid #27272a;border-radius:10px;padding:10px;margin-bottom:6px}
 .pcard .lab{font-size:9px;color:#f59e0b;letter-spacing:1.2px;margin-bottom:4px}
 
@@ -342,31 +345,73 @@ async function openGame(i) {
 
     let awBat = getLineup('away');
     let hmBat = getLineup('home');
+    let awConfirmed = awBat.length > 0;
+    let hmConfirmed = hmBat.length > 0;
 
-    // Fallback: get from roster
+    // Fallback: build probable lineup from depth chart
+    async function getDepthChartLineup(teamId) {
+      // Try depth chart first
+      let dc = await api('/api/v1/teams/'+teamId+'/roster/depthChart');
+      if (dc?.roster && dc.roster.length) {
+        // Group by position, take the first (starter) at each batting position
+        let posOrder = ['C','1B','2B','3B','SS','LF','CF','RF','DH'];
+        let byPos = {};
+        dc.roster.forEach(p => {
+          let pos = p.position?.abbreviation;
+          if (pos && !byPos[pos]) byPos[pos] = p;
+        });
+        let lineup = [];
+        let usedIds = new Set();
+        posOrder.forEach(pos => {
+          if (byPos[pos] && !usedIds.has(byPos[pos].person.id)) {
+            lineup.push({ id: byPos[pos].person.id, name: byPos[pos].person.fullName, pos: pos });
+            usedIds.add(byPos[pos].person.id);
+          }
+        });
+        if (lineup.length >= 7) return lineup;
+      }
+      // Final fallback: active roster
+      let r = await api('/api/v1/teams/'+teamId+'/roster?rosterType=active');
+      if (r?.roster) return r.roster.filter(p=>p.position?.type!=='Pitcher').slice(0,9).map(p=>({id:p.person.id,name:p.person.fullName,pos:p.position.abbreviation}));
+      return [];
+    }
+
     if (!awBat.length) {
-      let r = await api('/api/v1/teams/'+aw.team.id+'/roster?rosterType=active');
-      if (r?.roster) awBat = r.roster.filter(p=>p.position?.type!=='Pitcher').slice(0,9).map(p=>({id:p.person.id,name:p.person.fullName,pos:p.position.abbreviation}));
+      updateProgress(3, totalSteps, 'Building '+aw.team.abbreviation+' lineup from depth chart...', 15);
+      awBat = await getDepthChartLineup(aw.team.id);
     }
     if (!hmBat.length) {
-      let r = await api('/api/v1/teams/'+hm.team.id+'/roster?rosterType=active');
-      if (r?.roster) hmBat = r.roster.filter(p=>p.position?.type!=='Pitcher').slice(0,9).map(p=>({id:p.person.id,name:p.person.fullName,pos:p.position.abbreviation}));
+      updateProgress(3, totalSteps, 'Building '+hm.team.abbreviation+' lineup from depth chart...', 15);
+      hmBat = await getDepthChartLineup(hm.team.id);
     }
 
-    // Fetch season stats for each batter with progress tracking
+    // Fetch season stats + BvP for each batter with progress tracking
+    // Tag each batter with their opposing pitcher
+    awBat.forEach(b => b._oppPid = hp?.id || null);
+    hmBat.forEach(b => b._oppPid = ap?.id || null);
     let allBatters = [...awBat, ...hmBat];
     totalSteps = 3 + allBatters.length;
     let completed = 3;
 
     async function enrichBatter(b) {
-      let data = await api('/api/v1/people/'+b.id+'?hydrate=stats(group=[hitting],type=[season],season=2026)');
+      let [data, bvpData] = await Promise.all([
+        api('/api/v1/people/'+b.id+'?hydrate=stats(group=[hitting],type=[season],season=2026)'),
+        b._oppPid ? api('/api/v1/people/'+b.id+'/stats?stats=vsPlayer&opposingPlayerId='+b._oppPid+'&group=hitting&sportId=1') : null
+      ]);
       let ss = data?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat || null;
       let sv = savant[b.id] || null;
+      // Combine BvP splits
+      let bvpSplits = bvpData?.stats?.[0]?.splits || [];
+      let bvpCombined = null;
+      if (bvpSplits.length) {
+        bvpCombined = {};
+        bvpSplits.forEach(sp => { let s = sp.stat; Object.keys(s).forEach(k => { if (typeof s[k] === 'number') bvpCombined[k] = (bvpCombined[k]||0) + s[k]; }); });
+      }
       completed++;
       updateProgress(completed, totalSteps, 'Loading ' + b.name + '... (' + completed + '/' + totalSteps + ')', 15);
       return { ...b, avg: ss?.avg||null, ops: ss?.ops||null, woba: calcWOBA(ss),
-        xba: sv?.xba||null, xslg: sv?.xslg||null, xwoba: sv?.xwoba||null,
-        ev: sv?.ev||null, brl: sv?.brl||null };
+        xwoba: sv?.xwoba||null,
+        bvpWoba: calcWOBA(bvpCombined), bvpAB: bvpCombined?.atBats||0 };
     }
 
     // Run ALL batter fetches in parallel across both teams
@@ -408,7 +453,7 @@ async function openGame(i) {
     html += '</div>';
 
     // Edge
-    html += '<div class="edge"><b>EDGE </b>'+edgeText+'</div>';
+    html += '<details class="edge"><summary style="cursor:pointer;font-weight:700;font-size:10px;color:#f59e0b;letter-spacing:1px">EDGE NOTES ▾</summary><p style="margin-top:6px">'+edgeText+'</p></details>';
 
     // Linescore
     if (lsd?.innings?.length && (isL||isF)) {
@@ -430,7 +475,7 @@ async function openGame(i) {
     // Away team section
     html += '<div style="font-size:12px;font-weight:700;margin-top:4px">'+aw.team.abbreviation+'</div>';
     html += pitcherCard(ap, apS, aw.team.abbreviation+' SP');
-    html += '<div style="font-size:9px;color:#52525b;margin:4px 0 2px">Batting vs '+(hp?.fullName||'TBD')+'</div>';
+    html += '<div style="font-size:9px;color:#52525b;margin:4px 0 2px">Batting vs '+(hp?.fullName||'TBD')+' <span style="color:'+(awConfirmed?'#34d399':'#f59e0b')+'">'+(awConfirmed?'✓ Confirmed':'⟡ Projected')+'</span></div>';
     html += batterTable(enrichedAw, curBatId, isL||isF);
 
     html += '<hr class="divider">';
@@ -438,10 +483,26 @@ async function openGame(i) {
     // Home team section
     html += '<div style="font-size:12px;font-weight:700;margin-top:4px">'+hm.team.abbreviation+'</div>';
     html += pitcherCard(hp, hpS, hm.team.abbreviation+' SP');
-    html += '<div style="font-size:9px;color:#52525b;margin:4px 0 2px">Batting vs '+(ap?.fullName||'TBD')+'</div>';
+    html += '<div style="font-size:9px;color:#52525b;margin:4px 0 2px">Batting vs '+(ap?.fullName||'TBD')+' <span style="color:'+(hmConfirmed?'#34d399':'#f59e0b')+'">'+(hmConfirmed?'✓ Confirmed':'⟡ Projected')+'</span></div>';
     html += batterTable(enrichedHm, curBatId, isL||isF);
 
-    html += '<div class="leg"><b>Colors:</b> <span class="grn">Green</span> = wOBA .340+ (elite) · <span class="red">Red</span> = wOBA under .300 (cold) · <span class="amb">Amber</span> = wOBA .370+ (crusher) or HR hit · <span style="color:#c084fc">Purple</span> = Statcast highlight (EV 90+ mph or Brl% 8%+)<br><br><b>Columns:</b> wOBA = 2026 season weighted on-base. xwOBA = Savant expected wOBA (luck-adjusted). EV = avg exit velocity. Brl% = barrel rate. FIP = fielding-independent pitching.<br>Arrows cycle games across days.</div>';
+    html += '<div class="leg"><b style="color:#fafafa">Legend</b><br>';
+    html += '<span class="grn">●</span> wOBA .340+ (above avg) · ';
+    html += '<span class="red">●</span> wOBA below .300 (below avg) · ';
+    html += '<span class="amb">●</span> wOBA .370+ (elite) or HR in game · ';
+    html += '<span style="color:#c084fc">●</span> Savant xwOBA · ';
+    html += '<span style="color:#fbbf24">●</span> Currently at bat';
+    html += '</div>';
+
+    html += '<details class="leg" style="margin-top:6px"><summary style="cursor:pointer;color:#a1a1aa;font-weight:600">What do these metrics mean? ▾</summary><div style="margin-top:8px;line-height:1.8">';
+    html += '<b style="color:#fafafa">AVG</b> — Batting average. Hits divided by at-bats. League avg ~.250.<br>';
+    html += '<b style="color:#fafafa">OPS</b> — On-base plus slugging. Combines how often a batter reaches base with their power. League avg ~.710. Above .800 is strong, .900+ is elite.<br>';
+    html += '<b style="color:#fafafa">wOBA</b> — Weighted on-base average. The best single measure of offensive value — weights walks, singles, doubles, triples, and HRs by their actual run value. League avg ~.310. Above .340 is good, .370+ is elite.<br>';
+    html += '<b style="color:#c084fc">xwOBA</b> — Expected wOBA from Baseball Savant. Based on exit velocity and launch angle of every batted ball. Strips out luck, defense, and ballpark — shows what a hitter "deserves" to produce. If xwOBA > wOBA, they\'re getting unlucky and due for regression up.<br>';
+    html += '<b style="color:#fafafa">BvP</b> — Batter vs Pitcher. Career wOBA against the specific opposing starter. Shows "—" if fewer than 3 career AB (too small a sample to trust). High BvP = this batter owns this pitcher.<br>';
+    html += '<b style="color:#fafafa">ERA</b> — Earned run average. Runs allowed per 9 innings. League avg ~4.00. Under 3.00 is ace-level.<br>';
+    html += '<b style="color:#fafafa">FIP</b> — Fielding independent pitching. Like ERA but only counts what the pitcher controls: strikeouts, walks, HRs. Better predictor of future performance than ERA. If FIP < ERA, pitcher is due for regression down (unlucky). If FIP > ERA, pitcher has been lucky.<br>';
+    html += '</div></details>';
     $('app').innerHTML = html;
 
   } catch(e) {
@@ -461,7 +522,8 @@ function batterTable(batters, curBatId, showGame) {
   if (!batters || !batters.length) return '<p style="text-align:center;color:#3f3f46;padding:10px;font-size:10px">Lineup not posted</p>';
   let hasSavant = batters.some(b => b.xwoba);
   let html = '<div style="overflow-x:auto"><table class="bt"><thead><tr><th style="text-align:left">#</th><th style="text-align:left">Batter</th><th style="text-align:center">P</th><th>AVG</th><th>OPS</th><th>wOBA</th>';
-  if (hasSavant) html += '<th style="color:#c084fc">xwOBA</th><th style="color:#c084fc">EV</th><th style="color:#c084fc">Brl%</th>';
+  if (hasSavant) html += '<th style="color:#c084fc">xwOBA</th>';
+  html += '<th>BvP</th>';
   if (showGame) html += '<th>H</th><th>AB</th><th>HR</th><th>R</th><th>RBI</th>';
   html += '</tr></thead><tbody>';
   batters.forEach((b, i) => {
@@ -472,9 +534,11 @@ function batterTable(batters, curBatId, showGame) {
     if (hasSavant) {
       let xw = b.xwoba ? +b.xwoba : null;
       html += '<td class="'+wColor(xw)+'">'+(b.xwoba||'—')+'</td>';
-      html += '<td style="color:'+(b.ev&&+b.ev>=90?'#c084fc':'#a1a1aa')+'">'+(b.ev||'—')+'</td>';
-      html += '<td style="color:'+(b.brl&&+b.brl>=8?'#c084fc':'#a1a1aa')+'">'+(b.brl?b.brl+'%':'—')+'</td>';
     }
+    // BvP column
+    let bvp = b.bvpWoba;
+    let bvpAB = b.bvpAB || 0;
+    html += '<td class="'+wColor(bvpAB >= 3 ? bvp : null)+'">'+(bvpAB >= 3 ? fmt(bvp) : '—')+'</td>';
     if (showGame) {
       html += '<td>'+(b.gH!=null?b.gH:'—')+'</td>';
       html += '<td>'+(b.gAB!=null?b.gAB:'—')+'</td>';
@@ -489,8 +553,11 @@ function batterTable(batters, curBatId, showGame) {
   let avg = ws.length ? ws.reduce((a,b)=>a+b,0)/ws.length : null;
   let xws = batters.map(b=>b.xwoba?+b.xwoba:null).filter(w=>w!=null);
   let xavg = xws.length ? xws.reduce((a,b)=>a+b,0)/xws.length : null;
+  let bvps = batters.filter(b=>b.bvpWoba!=null&&b.bvpAB>=3).map(b=>b.bvpWoba);
+  let bavg = bvps.length ? bvps.reduce((a,b)=>a+b,0)/bvps.length : null;
   html += '<div style="font-size:9px;color:#52525b;margin-top:4px">Team wOBA: <span class="'+wColor(avg)+'" style="font-family:monospace">'+fmt(avg)+'</span>';
   if (xavg != null) html += ' · xwOBA: <span class="'+wColor(xavg)+'" style="font-family:monospace">'+fmt(xavg)+'</span>';
+  if (bavg != null) html += ' · BvP: <span class="'+wColor(bavg)+'" style="font-family:monospace">'+fmt(bavg)+'</span>';
   html += '</div>';
   return html;
 }
