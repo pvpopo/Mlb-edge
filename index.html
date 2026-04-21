@@ -107,97 +107,62 @@ function addPick(gamePk, type, side, price, label) {
   savePicks();
 }
 
-// --- Kalshi API ---
-async function loadKalshi() {
+// --- Odds API (The Odds API) ---
+const ODDS_KEY = '2148af5f5b68ca273f1e2b859c9b7b3d';
+async function loadOdds() {
   try {
-    // Fetch open MLB events from Kalshi
-    let url = 'https://api.elections.kalshi.com/trade-api/v2/events?status=open&with_nested_markets=true&limit=200&series_ticker=KXMLB';
-    let r = await fetch(url);
-    if (!r.ok) {
-      // Try alternate series tickers
-      for (let st of ['KXBASEBALLMLB','KXBASEBALL','MLB']) {
-        r = await fetch('https://api.elections.kalshi.com/trade-api/v2/events?status=open&with_nested_markets=true&limit=200&series_ticker=' + st);
-        if (r.ok) break;
-      }
-    }
-    if (!r.ok) {
-      // Try without series_ticker, search all and filter by title
-      r = await fetch('https://api.elections.kalshi.com/trade-api/v2/markets?status=open&limit=1000');
-      if (r.ok) {
-        let data = await r.json();
-        let mlbMarkets = (data.markets || []).filter(m => {
-          let t = (m.title || m.yes_sub_title || '').toLowerCase();
-          return t.includes('mlb') || t.includes('baseball') || t.includes('innings') || t.includes('runs');
+    let r = await fetch('https://api.the-odds-api.com/v4/sports/baseball_mlb/odds?regions=us&markets=h2h,spreads,totals&oddsFormat=american&apiKey=' + ODDS_KEY);
+    if (!r.ok) { console.warn('Odds API error:', r.status); return; }
+    let data = await r.json();
+    // Match odds to our games
+    let teamAbbr = {
+      'New York Yankees':'NYY','New York Mets':'NYM','Los Angeles Dodgers':'LAD',
+      'San Diego Padres':'SD','Los Angeles Angels':'LAA','Houston Astros':'HOU',
+      'Texas Rangers':'TEX','Seattle Mariners':'SEA','Oakland Athletics':'ATH','Athletics':'ATH',
+      'Boston Red Sox':'BOS','Tampa Bay Rays':'TB','Toronto Blue Jays':'TOR',
+      'Baltimore Orioles':'BAL','Minnesota Twins':'MIN','Cleveland Guardians':'CLE',
+      'Detroit Tigers':'DET','Chicago White Sox':'CWS','Kansas City Royals':'KC',
+      'Atlanta Braves':'ATL','Philadelphia Phillies':'PHI','Washington Nationals':'WSH',
+      'Miami Marlins':'MIA','Chicago Cubs':'CHC','Cincinnati Reds':'CIN',
+      'Milwaukee Brewers':'MIL','Pittsburgh Pirates':'PIT','St. Louis Cardinals':'STL',
+      'San Francisco Giants':'SF','Arizona Diamondbacks':'AZ','Colorado Rockies':'COL'
+    };
+    data.forEach(ev => {
+      let awAbbr = teamAbbr[ev.away_team] || null;
+      let hmAbbr = teamAbbr[ev.home_team] || null;
+      if (!awAbbr || !hmAbbr) return;
+      let matched = games.find(g => g.teams.away.team.abbreviation === awAbbr && g.teams.home.team.abbreviation === hmAbbr);
+      if (!matched) return;
+      let pk = matched.gamePk;
+      kalshi[pk] = { markets: [], ml_away: null, ml_home: null, spread: null, spreadPt: null, ou: null, ouPt: null };
+      // Use first bookmaker for each market (usually DraftKings)
+      (ev.bookmakers || []).slice(0, 1).forEach(bk => {
+        (bk.markets || []).forEach(mkt => {
+          if (mkt.key === 'h2h') {
+            mkt.outcomes.forEach(o => {
+              if (teamAbbr[o.name] === awAbbr) kalshi[pk].ml_away = o.price;
+              if (teamAbbr[o.name] === hmAbbr) kalshi[pk].ml_home = o.price;
+            });
+            kalshi[pk].markets.push({ ticker: 'ml', title: 'Moneyline: ' + awAbbr + ' vs ' + hmAbbr, type: 'ml', book: bk.title });
+          }
+          if (mkt.key === 'spreads') {
+            mkt.outcomes.forEach(o => {
+              if (teamAbbr[o.name] === awAbbr) { kalshi[pk].spread = o.price; kalshi[pk].spreadPt = o.point; }
+            });
+            let pts = mkt.outcomes[0]?.point || '';
+            kalshi[pk].markets.push({ ticker: 'spread', title: 'Run Line ' + pts, type: 'spread', book: bk.title, outcomes: mkt.outcomes.map(o => ({name: teamAbbr[o.name]||o.name, price: o.price, point: o.point})) });
+          }
+          if (mkt.key === 'totals') {
+            let overLine = mkt.outcomes.find(o => o.name === 'Over');
+            let underLine = mkt.outcomes.find(o => o.name === 'Under');
+            if (overLine) { kalshi[pk].ou = overLine.price; kalshi[pk].ouPt = overLine.point; }
+            kalshi[pk].markets.push({ ticker: 'totals', title: 'Total ' + (overLine?.point||''), type: 'totals', book: bk.title, outcomes: mkt.outcomes.map(o => ({name: o.name, price: o.price, point: o.point})) });
+          }
         });
-        parseKalshiMarkets(mlbMarkets);
-        console.log('Kalshi (markets search):', Object.keys(kalshi).length, 'games matched');
-        return;
-      }
-    }
-    if (r.ok) {
-      let data = await r.json();
-      let allMarkets = [];
-      (data.events || []).forEach(ev => {
-        (ev.markets || []).forEach(m => allMarkets.push({...m, eventTitle: ev.title}));
       });
-      parseKalshiMarkets(allMarkets);
-      console.log('Kalshi (events):', Object.keys(kalshi).length, 'games matched');
-    }
-  } catch(e) { console.warn('Kalshi error:', e); }
-}
-
-function parseKalshiMarkets(markets) {
-  // Team abbreviation mapping for matching
-  let teamMap = {
-    'yankees':'NYY','mets':'NYM','dodgers':'LAD','padres':'SD','angels':'LAA',
-    'astros':'HOU','rangers':'TEX','mariners':'SEA','athletics':'ATH','a\'s':'ATH',
-    'red sox':'BOS','rays':'TB','blue jays':'TOR','orioles':'BAL','twins':'MIN',
-    'guardians':'CLE','tigers':'DET','white sox':'CWS','royals':'KC',
-    'braves':'ATL','phillies':'PHI','nationals':'WSH','marlins':'MIA',
-    'cubs':'CHC','reds':'CIN','brewers':'MIL','pirates':'PIT','cardinals':'STL',
-    'giants':'SF','diamondbacks':'AZ','d-backs':'AZ','rockies':'COL'
-  };
-
-  markets.forEach(m => {
-    let title = (m.title || m.yes_sub_title || m.eventTitle || '').toLowerCase();
-    // Try to match teams
-    let matchedTeams = [];
-    Object.keys(teamMap).forEach(name => {
-      if (title.includes(name)) matchedTeams.push(teamMap[name]);
     });
-    if (matchedTeams.length < 1) return;
-
-    // Try to match to a game
-    let matched = games.find(g => {
-      let awAbbr = g.teams.away.team.abbreviation;
-      let hmAbbr = g.teams.home.team.abbreviation;
-      return matchedTeams.some(t => t === awAbbr || t === hmAbbr);
-    });
-    if (!matched) return;
-    let pk = matched.gamePk;
-    if (!kalshi[pk]) kalshi[pk] = { markets: [] };
-
-    let price = m.yes_bid_dollars || m.last_price_dollars || null;
-    let noPrice = m.no_bid_dollars || null;
-
-    // Categorize by market type
-    if (title.includes('win') || title.includes('moneyline') || title.includes('winner')) {
-      // ML market — figure out which team
-      matchedTeams.forEach(t => {
-        if (t === matched.teams.away.team.abbreviation) kalshi[pk].ml_away = price;
-        if (t === matched.teams.home.team.abbreviation) kalshi[pk].ml_home = price;
-      });
-    }
-    if (title.includes('over') || title.includes('under') || title.includes('total')) {
-      kalshi[pk].ou = price;
-      kalshi[pk].ouTitle = m.title || m.yes_sub_title || '';
-    }
-    if (title.includes('spread') || title.includes('run line') || title.includes('+1.5') || title.includes('-1.5')) {
-      kalshi[pk].spread = price;
-      kalshi[pk].spreadTitle = m.title || m.yes_sub_title || '';
-    }
-    kalshi[pk].markets.push({ ticker: m.ticker, title: m.title || m.yes_sub_title, price, noPrice, status: m.status });
-  });
+    console.log('Odds loaded:', Object.keys(kalshi).length, 'games matched');
+  } catch(e) { console.warn('Odds error:', e); }
 } // player_id -> {xba, xslg, xwoba, ev, brl}
 
 // --- Savant CSV loader ---
@@ -349,6 +314,8 @@ async function loadGamesQuiet() {
   let data = await api('/api/v1/schedule?sportId=1&date=' + date + '&hydrate=probablePitcher,linescore,team');
   games = data?.dates?.[0]?.games || [];
   games.sort((a,b) => new Date(a.gameDate) - new Date(b.gameDate));
+  kalshi = {};
+  await loadOdds();
 }
 
 async function load() {
@@ -378,15 +345,15 @@ async function load() {
   games = data.dates[0].games || [];
   games.sort((a,b) => new Date(a.gameDate) - new Date(b.gameDate));
 
-  // Step 3: Kalshi lines
+  // Step 3: Odds lines
   kalshi = {};
-  await loadKalshi();
+  await loadOdds();
 
   let svCount = Object.keys(savant).length;
   let kCount = Object.keys(kalshi).length;
   let statusParts = [games.length + ' GAMES'];
   if (svCount) statusParts.push('SAVANT ✓');
-  if (kCount) statusParts.push('KALSHI ✓');
+  if (kCount) statusParts.push('ODDS ✓');
   $('sub').textContent = statusParts.join(' · ');
   renderNav();
   renderList();
@@ -400,7 +367,7 @@ function renderList() {
     html += '<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.15);border-radius:8px;padding:8px;margin-bottom:10px">';
     html += '<div style="font-size:9px;color:#f59e0b;letter-spacing:1px;margin-bottom:4px">MY PICKS · ' + allPicks.length + ' ACTIVE</div>';
     allPicks.forEach(([k, p]) => {
-      html += '<span class="pick-tag" style="margin:2px" onclick="event.stopPropagation();delete picks[\''+k+'\'];savePicks();renderList()">🎯 ' + p.label + ' ' + (p.price||'') + '¢ ✕</span>';
+      html += '<span class="pick-tag" style="margin:2px" onclick="event.stopPropagation();delete picks[\''+k+'\'];savePicks();renderList()">🎯 ' + p.label + ' ✕</span>';
     });
     html += '</div>';
   }
@@ -423,14 +390,14 @@ function renderList() {
       let aR = ls.teams?.away?.runs ?? 0, hR = ls.teams?.home?.runs ?? 0;
       html += `<div class="scorebar"><span style="font-size:11px;font-weight:600">${aw.team.abbreviation}</span><span class="num ${isF&&aR>hR?'w':''}">${aR}</span><span style="font-size:9px;color:${isL?'#a3e635':'#52525b'}">${isL?((ls.isTopInning?'▲':'▼')+' '+(ls.currentInningOrdinal||'')):g.status?.detailedState||''}</span><span class="num ${isF&&hR>aR?'w':''}">${hR}</span><span style="font-size:11px;font-weight:600">${hm.team.abbreviation}</span></div>`;
     }
-    // Kalshi lines preview
+    // Odds lines preview
     let kd = kalshi[g.gamePk];
     if (kd) {
       html += '<div class="kline">';
-      if (kd.ml_away) html += '<span class="kbtn">' + aw.team.abbreviation + ' ' + kd.ml_away + '¢</span>';
-      if (kd.ml_home) html += '<span class="kbtn">' + hm.team.abbreviation + ' ' + kd.ml_home + '¢</span>';
-      if (kd.ou) html += '<span class="kbtn">O/U ' + kd.ou + '¢</span>';
-      if (kd.spread) html += '<span class="kbtn">Spread ' + kd.spread + '¢</span>';
+      if (kd.ml_away != null) html += '<span class="kbtn">' + aw.team.abbreviation + ' ' + (kd.ml_away > 0 ? '+' : '') + kd.ml_away + '</span>';
+      if (kd.ml_home != null) html += '<span class="kbtn">' + hm.team.abbreviation + ' ' + (kd.ml_home > 0 ? '+' : '') + kd.ml_home + '</span>';
+      if (kd.ouPt != null) html += '<span class="kbtn">O/U ' + kd.ouPt + '</span>';
+      if (kd.spreadPt != null) html += '<span class="kbtn">RL ' + (kd.spreadPt > 0 ? '+' : '') + kd.spreadPt + '</span>';
       html += '</div>';
     }
     // Show picks for this game
@@ -626,55 +593,47 @@ async function openGame(i) {
       html += '</tbody></table></div>';
     }
 
-    // Kalshi lines section
+    // Odds section
     let kd = kalshi[g.gamePk];
     if (kd && kd.markets && kd.markets.length) {
-      html += '<div class="ksection"><div class="klab">KALSHI LINES · TAP TO PICK</div>';
-      // ML markets
-      if (kd.ml_away || kd.ml_home) {
-        html += '<div class="kmkt"><span class="ktitle">Moneyline</span>';
-        let awPk = picks[g.gamePk+'_ml_away'];
-        let hmPk = picks[g.gamePk+'_ml_home'];
-        if (kd.ml_away) html += '<button class="kyes '+(awPk?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'ml_away\',\''+kd.ml_away+'\',\''+aw.team.abbreviation+' ML\')">'+aw.team.abbreviation+' '+kd.ml_away+'¢</button>';
-        if (kd.ml_home) html += '<button class="kno '+(hmPk?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'ml_home\',\''+kd.ml_home+'\',\''+hm.team.abbreviation+' ML\')">'+hm.team.abbreviation+' '+kd.ml_home+'¢</button>';
-        html += '</div>';
-      }
-      // O/U
-      kd.markets.filter(m => {
-        let t = (m.title||'').toLowerCase();
-        return t.includes('over') || t.includes('under') || t.includes('total');
-      }).slice(0,3).forEach(m => {
-        let pk = picks[g.gamePk+'_ou_'+m.ticker];
-        html += '<div class="kmkt"><span class="ktitle" style="font-size:9px">'+m.title+'</span>';
-        html += '<button class="kyes '+(pk&&pk.side==='yes'?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'ou_'+m.ticker+'\',\''+m.price+'\',\''+m.title.replace(/'/g,'')+' YES\',\'yes\')">Y '+(m.price||'—')+'¢</button>';
-        html += '<button class="kno '+(pk&&pk.side==='no'?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'ou_'+m.ticker+'\',\''+(m.noPrice||'')+'\',\''+m.title.replace(/'/g,'')+' NO\',\'no\')">N '+(m.noPrice||'—')+'¢</button>';
-        html += '</div>';
-      });
-      // Spread
-      kd.markets.filter(m => {
-        let t = (m.title||'').toLowerCase();
-        return t.includes('spread') || t.includes('run line') || t.includes('+1.5') || t.includes('-1.5');
-      }).slice(0,2).forEach(m => {
-        let pk = picks[g.gamePk+'_sp_'+m.ticker];
-        html += '<div class="kmkt"><span class="ktitle" style="font-size:9px">'+m.title+'</span>';
-        html += '<button class="kyes '+(pk&&pk.side==='yes'?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'sp_'+m.ticker+'\',\''+m.price+'\',\''+m.title.replace(/'/g,'')+' YES\',\'yes\')">Y '+(m.price||'—')+'¢</button>';
-        html += '<button class="kno '+(pk&&pk.side==='no'?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'sp_'+m.ticker+'\',\''+(m.noPrice||'')+'\',\''+m.title.replace(/'/g,'')+' NO\',\'no\')">N '+(m.noPrice||'—')+'¢</button>';
-        html += '</div>';
-      });
-      // Any other markets
-      kd.markets.filter(m => {
-        let t = (m.title||'').toLowerCase();
-        return !t.includes('win') && !t.includes('moneyline') && !t.includes('over') && !t.includes('under') && !t.includes('total') && !t.includes('spread') && !t.includes('run line');
-      }).slice(0,5).forEach(m => {
-        let pk = picks[g.gamePk+'_oth_'+m.ticker];
-        html += '<div class="kmkt"><span class="ktitle" style="font-size:9px">'+m.title+'</span>';
-        html += '<button class="kyes '+(pk&&pk.side==='yes'?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'oth_'+m.ticker+'\',\''+m.price+'\',\''+m.title.replace(/'/g,'')+' YES\',\'yes\')">Y '+(m.price||'—')+'¢</button>';
-        html += '<button class="kno '+(pk&&pk.side==='no'?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'oth_'+m.ticker+'\',\''+(m.noPrice||'')+'\',\''+m.title.replace(/'/g,'')+' NO\',\'no\')">N '+(m.noPrice||'—')+'¢</button>';
-        html += '</div>';
+      html += '<div class="ksection"><div class="klab">BETTING LINES · TAP TO PICK</div>';
+      kd.markets.forEach(mkt => {
+        if (mkt.type === 'ml') {
+          // Moneyline
+          let awPk = picks[g.gamePk+'_ml_away'];
+          let hmPk = picks[g.gamePk+'_ml_home'];
+          let awOdds = kd.ml_away != null ? (kd.ml_away > 0 ? '+' : '') + kd.ml_away : '—';
+          let hmOdds = kd.ml_home != null ? (kd.ml_home > 0 ? '+' : '') + kd.ml_home : '—';
+          html += '<div class="kmkt"><span class="ktitle">Moneyline</span>';
+          html += '<button class="kyes '+(awPk?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'ml_away\',\''+kd.ml_away+'\',\''+aw.team.abbreviation+' ML '+awOdds+'\',\'away\')">'+aw.team.abbreviation+' '+awOdds+'</button>';
+          html += '<button class="kno '+(hmPk?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'ml_home\',\''+kd.ml_home+'\',\''+hm.team.abbreviation+' ML '+hmOdds+'\',\'home\')">'+hm.team.abbreviation+' '+hmOdds+'</button>';
+          html += '</div>';
+          html += '<div style="font-size:8px;color:#3f3f46;padding:0 0 4px">via ' + (mkt.book||'') + '</div>';
+        }
+        if (mkt.type === 'spread' && mkt.outcomes) {
+          html += '<div class="kmkt"><span class="ktitle">Run Line</span>';
+          mkt.outcomes.forEach(o => {
+            let pk = picks[g.gamePk+'_spread_'+o.name];
+            let odds = o.price != null ? (o.price > 0 ? '+' : '') + o.price : '—';
+            let pt = o.point != null ? (o.point > 0 ? '+' : '') + o.point : '';
+            html += '<button class="kyes '+(pk?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'spread_'+o.name+'\',\''+o.price+'\',\''+o.name+' '+pt+' ('+odds+')\',\''+o.name+'\')">'+o.name+' '+pt+' ('+odds+')</button>';
+          });
+          html += '</div>';
+        }
+        if (mkt.type === 'totals' && mkt.outcomes) {
+          let pt = mkt.outcomes[0]?.point || '';
+          html += '<div class="kmkt"><span class="ktitle">Total ' + pt + '</span>';
+          mkt.outcomes.forEach(o => {
+            let pk = picks[g.gamePk+'_total_'+o.name];
+            let odds = o.price != null ? (o.price > 0 ? '+' : '') + o.price : '—';
+            html += '<button class="'+(o.name==='Over'?'kyes':'kno')+' '+(pk?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'total_'+o.name+'\',\''+o.price+'\',\''+o.name+' '+pt+' ('+odds+')\',\''+o.name+'\')">'+o.name+' ('+odds+')</button>';
+          });
+          html += '</div>';
+        }
       });
       html += '</div>';
     } else {
-      html += '<div class="ksection"><div class="klab">KALSHI LINES</div><div style="font-size:10px;color:#52525b;padding:4px 0">No Kalshi markets found for this game. Lines may not be posted yet or CORS may be blocking the API.</div></div>';
+      html += '<div class="ksection"><div class="klab">BETTING LINES</div><div style="font-size:10px;color:#52525b;padding:4px 0">No odds available yet. Lines post closer to game time.</div></div>';
     }
 
     // Away team section
