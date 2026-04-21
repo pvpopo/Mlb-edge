@@ -65,6 +65,21 @@ table.bt tr.ab td:nth-child(2){color:#fbbf24;font-weight:700}
 .pest{font-size:9px;color:#3f3f46;margin-top:2px}
 .err{text-align:center;padding:30px;color:#f87171;font-size:11px}
 .err button{margin-top:10px;background:#111;border:1px solid #27272a;color:#a1a1aa;border-radius:8px;padding:8px 20px;font-size:11px}
+.kline{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.kbtn{background:#1a1a1d;border:1px solid #27272a;border-radius:6px;padding:4px 8px;font-size:9px;color:#a1a1aa;font-family:‘SF Mono’,monospace;cursor:pointer}
+.kbtn:active{background:#27272a}
+.kbtn.picked{background:rgba(245,158,11,.15);border-color:rgba(245,158,11,.4);color:#f59e0b}
+.pick-tag{display:inline-block;background:rgba(245,158,11,.12);color:#f59e0b;font-size:8px;font-weight:600;padding:2px 5px;border-radius:4px;margin-left:4px;letter-spacing:.3px}
+.ksection{background:#111;border:1px solid #27272a;border-radius:10px;padding:10px;margin-bottom:10px}
+.ksection .klab{font-size:9px;color:#f59e0b;letter-spacing:1.2px;margin-bottom:6px}
+.kmkt{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(39,39,42,.4)}
+.kmkt:last-child{border-bottom:none}
+.kmkt .ktitle{font-size:10px;color:#a1a1aa;flex:1}
+.kmkt .kyes,.kmkt .kno{border-radius:6px;padding:5px 10px;font-size:10px;font-family:‘SF Mono’,monospace;font-weight:600;cursor:pointer;border:1px solid #27272a;min-width:52px;text-align:center}
+.kmkt .kyes{background:#111;color:#34d399;margin-right:4px}
+.kmkt .kno{background:#111;color:#f87171}
+.kmkt .kyes:active,.kmkt .kno:active{background:#27272a}
+.kmkt .kyes.picked,.kmkt .kno.picked{background:rgba(245,158,11,.15);border-color:rgba(245,158,11,.4);color:#f59e0b}
 </style>
 
 </head>
@@ -80,7 +95,110 @@ let date = new Date().toISOString().slice(0,10);
 let games = [];
 let sel = null;
 let mode = 'list';
-let savant = {}; // player_id -> {xba, xslg, xwoba, ev, brl}
+let savant = {};
+let kalshi = {}; // gamePk -> {ml_away, ml_home, spread, ou, markets:[]}
+let picks = JSON.parse(localStorage.getItem('mlb_picks') || '{}'); // gamePk -> {type, side, price, label}
+
+function savePicks() { localStorage.setItem('mlb_picks', JSON.stringify(picks)); }
+function addPick(gamePk, type, side, price, label) {
+  let key = gamePk + '_' + type;
+  if (picks[key] && picks[key].side === side) { delete picks[key]; } // toggle off
+  else { picks[key] = { type, side, price, label, ts: Date.now() }; }
+  savePicks();
+}
+
+// --- Kalshi API ---
+async function loadKalshi() {
+  try {
+    // Fetch open MLB events from Kalshi
+    let url = 'https://api.elections.kalshi.com/trade-api/v2/events?status=open&with_nested_markets=true&limit=200&series_ticker=KXMLB';
+    let r = await fetch(url);
+    if (!r.ok) {
+      // Try alternate series tickers
+      for (let st of ['KXBASEBALLMLB','KXBASEBALL','MLB']) {
+        r = await fetch('https://api.elections.kalshi.com/trade-api/v2/events?status=open&with_nested_markets=true&limit=200&series_ticker=' + st);
+        if (r.ok) break;
+      }
+    }
+    if (!r.ok) {
+      // Try without series_ticker, search all and filter by title
+      r = await fetch('https://api.elections.kalshi.com/trade-api/v2/markets?status=open&limit=1000');
+      if (r.ok) {
+        let data = await r.json();
+        let mlbMarkets = (data.markets || []).filter(m => {
+          let t = (m.title || m.yes_sub_title || '').toLowerCase();
+          return t.includes('mlb') || t.includes('baseball') || t.includes('innings') || t.includes('runs');
+        });
+        parseKalshiMarkets(mlbMarkets);
+        console.log('Kalshi (markets search):', Object.keys(kalshi).length, 'games matched');
+        return;
+      }
+    }
+    if (r.ok) {
+      let data = await r.json();
+      let allMarkets = [];
+      (data.events || []).forEach(ev => {
+        (ev.markets || []).forEach(m => allMarkets.push({...m, eventTitle: ev.title}));
+      });
+      parseKalshiMarkets(allMarkets);
+      console.log('Kalshi (events):', Object.keys(kalshi).length, 'games matched');
+    }
+  } catch(e) { console.warn('Kalshi error:', e); }
+}
+
+function parseKalshiMarkets(markets) {
+  // Team abbreviation mapping for matching
+  let teamMap = {
+    'yankees':'NYY','mets':'NYM','dodgers':'LAD','padres':'SD','angels':'LAA',
+    'astros':'HOU','rangers':'TEX','mariners':'SEA','athletics':'ATH','a\'s':'ATH',
+    'red sox':'BOS','rays':'TB','blue jays':'TOR','orioles':'BAL','twins':'MIN',
+    'guardians':'CLE','tigers':'DET','white sox':'CWS','royals':'KC',
+    'braves':'ATL','phillies':'PHI','nationals':'WSH','marlins':'MIA',
+    'cubs':'CHC','reds':'CIN','brewers':'MIL','pirates':'PIT','cardinals':'STL',
+    'giants':'SF','diamondbacks':'AZ','d-backs':'AZ','rockies':'COL'
+  };
+
+  markets.forEach(m => {
+    let title = (m.title || m.yes_sub_title || m.eventTitle || '').toLowerCase();
+    // Try to match teams
+    let matchedTeams = [];
+    Object.keys(teamMap).forEach(name => {
+      if (title.includes(name)) matchedTeams.push(teamMap[name]);
+    });
+    if (matchedTeams.length < 1) return;
+
+    // Try to match to a game
+    let matched = games.find(g => {
+      let awAbbr = g.teams.away.team.abbreviation;
+      let hmAbbr = g.teams.home.team.abbreviation;
+      return matchedTeams.some(t => t === awAbbr || t === hmAbbr);
+    });
+    if (!matched) return;
+    let pk = matched.gamePk;
+    if (!kalshi[pk]) kalshi[pk] = { markets: [] };
+
+    let price = m.yes_bid_dollars || m.last_price_dollars || null;
+    let noPrice = m.no_bid_dollars || null;
+
+    // Categorize by market type
+    if (title.includes('win') || title.includes('moneyline') || title.includes('winner')) {
+      // ML market — figure out which team
+      matchedTeams.forEach(t => {
+        if (t === matched.teams.away.team.abbreviation) kalshi[pk].ml_away = price;
+        if (t === matched.teams.home.team.abbreviation) kalshi[pk].ml_home = price;
+      });
+    }
+    if (title.includes('over') || title.includes('under') || title.includes('total')) {
+      kalshi[pk].ou = price;
+      kalshi[pk].ouTitle = m.title || m.yes_sub_title || '';
+    }
+    if (title.includes('spread') || title.includes('run line') || title.includes('+1.5') || title.includes('-1.5')) {
+      kalshi[pk].spread = price;
+      kalshi[pk].spreadTitle = m.title || m.yes_sub_title || '';
+    }
+    kalshi[pk].markets.push({ ticker: m.ticker, title: m.title || m.yes_sub_title, price, noPrice, status: m.status });
+  });
+} // player_id -> {xba, xslg, xwoba, ev, brl}
 
 // --- Savant CSV loader ---
 async function loadSavant() {
@@ -259,6 +377,11 @@ async function load() {
   }
   games = data.dates[0].games || [];
   games.sort((a,b) => new Date(a.gameDate) - new Date(b.gameDate));
+
+  // Step 3: Kalshi lines (non-blocking)
+  kalshi = {};
+  loadKalshi().catch(() => {});
+
   let svCount = Object.keys(savant).length;
   $('sub').textContent = games.length + ' GAMES' + (svCount ? ' · SAVANT ✓' : '');
   renderNav();
