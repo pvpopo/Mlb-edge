@@ -378,18 +378,32 @@ async function load() {
   games = data.dates[0].games || [];
   games.sort((a,b) => new Date(a.gameDate) - new Date(b.gameDate));
 
-  // Step 3: Kalshi lines (non-blocking)
+  // Step 3: Kalshi lines
   kalshi = {};
-  loadKalshi().catch(() => {});
+  await loadKalshi();
 
   let svCount = Object.keys(savant).length;
-  $('sub').textContent = games.length + ' GAMES' + (svCount ? ' · SAVANT ✓' : '');
+  let kCount = Object.keys(kalshi).length;
+  let statusParts = [games.length + ' GAMES'];
+  if (svCount) statusParts.push('SAVANT ✓');
+  if (kCount) statusParts.push('KALSHI ✓');
+  $('sub').textContent = statusParts.join(' · ');
   renderNav();
   renderList();
 }
 
 function renderList() {
   let html = '';
+  // Picks summary
+  let allPicks = Object.entries(picks);
+  if (allPicks.length) {
+    html += '<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.15);border-radius:8px;padding:8px;margin-bottom:10px">';
+    html += '<div style="font-size:9px;color:#f59e0b;letter-spacing:1px;margin-bottom:4px">MY PICKS · ' + allPicks.length + ' ACTIVE</div>';
+    allPicks.forEach(([k, p]) => {
+      html += '<span class="pick-tag" style="margin:2px" onclick="event.stopPropagation();delete picks[\''+k+'\'];savePicks();renderList()">🎯 ' + p.label + ' ' + (p.price||'') + '¢ ✕</span>';
+    });
+    html += '</div>';
+  }
   games.forEach((g, i) => {
     let aw = g.teams.away, hm = g.teams.home;
     let ap = aw.probablePitcher, hp = hm.probablePitcher;
@@ -408,6 +422,23 @@ function renderList() {
     if (ls && (isL || isF)) {
       let aR = ls.teams?.away?.runs ?? 0, hR = ls.teams?.home?.runs ?? 0;
       html += `<div class="scorebar"><span style="font-size:11px;font-weight:600">${aw.team.abbreviation}</span><span class="num ${isF&&aR>hR?'w':''}">${aR}</span><span style="font-size:9px;color:${isL?'#a3e635':'#52525b'}">${isL?((ls.isTopInning?'▲':'▼')+' '+(ls.currentInningOrdinal||'')):g.status?.detailedState||''}</span><span class="num ${isF&&hR>aR?'w':''}">${hR}</span><span style="font-size:11px;font-weight:600">${hm.team.abbreviation}</span></div>`;
+    }
+    // Kalshi lines preview
+    let kd = kalshi[g.gamePk];
+    if (kd) {
+      html += '<div class="kline">';
+      if (kd.ml_away) html += '<span class="kbtn">' + aw.team.abbreviation + ' ' + kd.ml_away + '¢</span>';
+      if (kd.ml_home) html += '<span class="kbtn">' + hm.team.abbreviation + ' ' + kd.ml_home + '¢</span>';
+      if (kd.ou) html += '<span class="kbtn">O/U ' + kd.ou + '¢</span>';
+      if (kd.spread) html += '<span class="kbtn">Spread ' + kd.spread + '¢</span>';
+      html += '</div>';
+    }
+    // Show picks for this game
+    let gamePicks = Object.keys(picks).filter(k => k.startsWith(g.gamePk + '_'));
+    if (gamePicks.length) {
+      html += '<div style="margin-top:4px">';
+      gamePicks.forEach(k => { html += '<span class="pick-tag">🎯 ' + picks[k].label + '</span>'; });
+      html += '</div>';
     }
     html += `</button>`;
   });
@@ -595,6 +626,57 @@ async function openGame(i) {
       html += '</tbody></table></div>';
     }
 
+    // Kalshi lines section
+    let kd = kalshi[g.gamePk];
+    if (kd && kd.markets && kd.markets.length) {
+      html += '<div class="ksection"><div class="klab">KALSHI LINES · TAP TO PICK</div>';
+      // ML markets
+      if (kd.ml_away || kd.ml_home) {
+        html += '<div class="kmkt"><span class="ktitle">Moneyline</span>';
+        let awPk = picks[g.gamePk+'_ml_away'];
+        let hmPk = picks[g.gamePk+'_ml_home'];
+        if (kd.ml_away) html += '<button class="kyes '+(awPk?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'ml_away\',\''+kd.ml_away+'\',\''+aw.team.abbreviation+' ML\')">'+aw.team.abbreviation+' '+kd.ml_away+'¢</button>';
+        if (kd.ml_home) html += '<button class="kno '+(hmPk?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'ml_home\',\''+kd.ml_home+'\',\''+hm.team.abbreviation+' ML\')">'+hm.team.abbreviation+' '+kd.ml_home+'¢</button>';
+        html += '</div>';
+      }
+      // O/U
+      kd.markets.filter(m => {
+        let t = (m.title||'').toLowerCase();
+        return t.includes('over') || t.includes('under') || t.includes('total');
+      }).slice(0,3).forEach(m => {
+        let pk = picks[g.gamePk+'_ou_'+m.ticker];
+        html += '<div class="kmkt"><span class="ktitle" style="font-size:9px">'+m.title+'</span>';
+        html += '<button class="kyes '+(pk&&pk.side==='yes'?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'ou_'+m.ticker+'\',\''+m.price+'\',\''+m.title.replace(/'/g,'')+' YES\',\'yes\')">Y '+(m.price||'—')+'¢</button>';
+        html += '<button class="kno '+(pk&&pk.side==='no'?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'ou_'+m.ticker+'\',\''+(m.noPrice||'')+'\',\''+m.title.replace(/'/g,'')+' NO\',\'no\')">N '+(m.noPrice||'—')+'¢</button>';
+        html += '</div>';
+      });
+      // Spread
+      kd.markets.filter(m => {
+        let t = (m.title||'').toLowerCase();
+        return t.includes('spread') || t.includes('run line') || t.includes('+1.5') || t.includes('-1.5');
+      }).slice(0,2).forEach(m => {
+        let pk = picks[g.gamePk+'_sp_'+m.ticker];
+        html += '<div class="kmkt"><span class="ktitle" style="font-size:9px">'+m.title+'</span>';
+        html += '<button class="kyes '+(pk&&pk.side==='yes'?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'sp_'+m.ticker+'\',\''+m.price+'\',\''+m.title.replace(/'/g,'')+' YES\',\'yes\')">Y '+(m.price||'—')+'¢</button>';
+        html += '<button class="kno '+(pk&&pk.side==='no'?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'sp_'+m.ticker+'\',\''+(m.noPrice||'')+'\',\''+m.title.replace(/'/g,'')+' NO\',\'no\')">N '+(m.noPrice||'—')+'¢</button>';
+        html += '</div>';
+      });
+      // Any other markets
+      kd.markets.filter(m => {
+        let t = (m.title||'').toLowerCase();
+        return !t.includes('win') && !t.includes('moneyline') && !t.includes('over') && !t.includes('under') && !t.includes('total') && !t.includes('spread') && !t.includes('run line');
+      }).slice(0,5).forEach(m => {
+        let pk = picks[g.gamePk+'_oth_'+m.ticker];
+        html += '<div class="kmkt"><span class="ktitle" style="font-size:9px">'+m.title+'</span>';
+        html += '<button class="kyes '+(pk&&pk.side==='yes'?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'oth_'+m.ticker+'\',\''+m.price+'\',\''+m.title.replace(/'/g,'')+' YES\',\'yes\')">Y '+(m.price||'—')+'¢</button>';
+        html += '<button class="kno '+(pk&&pk.side==='no'?'picked':'')+'" onclick="event.stopPropagation();makePick('+g.gamePk+',\'oth_'+m.ticker+'\',\''+(m.noPrice||'')+'\',\''+m.title.replace(/'/g,'')+' NO\',\'no\')">N '+(m.noPrice||'—')+'¢</button>';
+        html += '</div>';
+      });
+      html += '</div>';
+    } else {
+      html += '<div class="ksection"><div class="klab">KALSHI LINES</div><div style="font-size:10px;color:#52525b;padding:4px 0">No Kalshi markets found for this game. Lines may not be posted yet or CORS may be blocking the API.</div></div>';
+    }
+
     // Away team section
     html += '<div style="font-size:12px;font-weight:700;margin-top:4px">'+aw.team.abbreviation+'</div>';
     html += pitcherCard(ap, apS, aw.team.abbreviation+' SP');
@@ -688,6 +770,16 @@ function batterTable(batters, curBatId, showGame) {
 function refresh() {
   if (mode === 'detail' && sel !== null) { openGame(sel); }
   else { load(); }
+}
+
+function makePick(gamePk, type, price, label, side) {
+  let key = gamePk + '_' + type;
+  if (picks[key] && picks[key].side === (side||type)) { delete picks[key]; }
+  else { picks[key] = { type, side: side||type, price, label, ts: Date.now() }; }
+  savePicks();
+  // Re-render current view
+  if (mode === 'detail' && sel !== null) openGame(sel);
+  else if (mode === 'list') renderList();
 }
 
 // Start
