@@ -97,9 +97,23 @@ let sel = null;
 let mode = 'list';
 let savant = {};
 let kalshi = {}; // gamePk -> {ml_away, ml_home, spread, ou, markets:[]}
-let picks = JSON.parse(localStorage.getItem('mlb_picks') || '{}'); // gamePk -> {type, side, price, label}
+let picks = JSON.parse(localStorage.getItem('mlb_picks') || '{}'); // gamePk -> {type, side, price, label, date}
+let edgeCache = {}; // gamePk -> { awScore, hmScore, awAbbr, hmAbbr, verdict }
 
 function savePicks() { localStorage.setItem('mlb_picks', JSON.stringify(picks)); }
+
+function getPicksForDate(d) {
+  return Object.entries(picks).filter(([k, p]) => p.date === d);
+}
+
+// Park factors (runs, 1.00 = neutral, >1.00 = hitter friendly)
+const PARK = {
+  'COL':1.30,'BOS':1.10,'CIN':1.08,'TEX':1.06,'CHC':1.05,'PHI':1.04,'NYY':1.04,
+  'BAL':1.03,'MIL':1.02,'ATL':1.02,'MIN':1.01,'AZ':1.01,'HOU':1.00,'CLE':1.00,
+  'PIT':0.99,'DET':0.99,'WSH':0.98,'STL':0.98,'LAA':0.98,'TOR':0.97,'KC':0.97,
+  'SD':0.96,'CWS':0.96,'TB':0.95,'NYM':0.95,'SF':0.94,'MIA':0.93,'ATH':0.93,
+  'LAD':0.97,'SEA':0.92
+};
 function addPick(gamePk, type, side, price, label) {
   let key = gamePk + '_' + type;
   if (picks[key] && picks[key].side === side) { delete picks[key]; } // toggle off
@@ -361,13 +375,14 @@ async function load() {
 
 function renderList() {
   let html = '';
-  // Picks summary
-  let allPicks = Object.entries(picks);
-  if (allPicks.length) {
+  // Picks summary (filtered to current date)
+  let dayPicks = getPicksForDate(date);
+  if (dayPicks.length) {
     html += '<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.15);border-radius:8px;padding:8px;margin-bottom:10px">';
-    html += '<div style="font-size:9px;color:#f59e0b;letter-spacing:1px;margin-bottom:4px">MY PICKS · ' + allPicks.length + ' ACTIVE</div>';
-    allPicks.forEach(([k, p]) => {
-      html += '<span class="pick-tag" style="margin:2px" onclick="event.stopPropagation();delete picks[\''+k+'\'];savePicks();renderList()">🎯 ' + p.label + ' ✕</span>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:9px;color:#f59e0b;letter-spacing:1px">MY PICKS · ' + dayPicks.length + ' ACTIVE</span>';
+    html += '<button style="background:none;border:1px solid rgba(245,158,11,.3);color:#f59e0b;border-radius:4px;padding:2px 8px;font-size:8px;cursor:pointer" onclick="clearAllPicks()">CLEAR ALL</button></div>';
+    dayPicks.forEach(([k, p]) => {
+      html += '<span class="pick-tag" style="margin:2px;cursor:pointer" onclick="event.stopPropagation();delete picks[\''+k+'\'];savePicks();renderList()">🎯 ' + p.label + ' ✕</span>';
     });
     html += '</div>';
   }
@@ -390,6 +405,17 @@ function renderList() {
       let aR = ls.teams?.away?.runs ?? 0, hR = ls.teams?.home?.runs ?? 0;
       html += `<div class="scorebar"><span style="font-size:11px;font-weight:600">${aw.team.abbreviation}</span><span class="num ${isF&&aR>hR?'w':''}">${aR}</span><span style="font-size:9px;color:${isL?'#a3e635':'#52525b'}">${isL?((ls.isTopInning?'▲':'▼')+' '+(ls.currentInningOrdinal||'')):g.status?.detailedState||''}</span><span class="num ${isF&&hR>aR?'w':''}">${hR}</span><span style="font-size:11px;font-weight:600">${hm.team.abbreviation}</span></div>`;
     }
+    // Edge score preview (from cache)
+    let ec = edgeCache[g.gamePk];
+    if (ec) {
+      let diff = ec.awScore - ec.hmScore;
+      let favAbbr = diff >= 0 ? ec.awAbbr : ec.hmAbbr;
+      let favScore = Math.max(ec.awScore, ec.hmScore);
+      let absDiff = Math.abs(diff);
+      let color = absDiff > 20 ? '#34d399' : absDiff > 10 ? '#f59e0b' : '#52525b';
+      let strength = absDiff > 20 ? 'STRONG' : absDiff > 10 ? 'MOD' : absDiff > 5 ? 'SLIGHT' : 'EVEN';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding:3px 6px;background:rgba(245,158,11,.06);border-radius:4px"><span style="font-size:8px;color:#a1a1aa;letter-spacing:.5px">EDGE</span><span style="font-size:9px;font-weight:700;font-family:monospace;color:'+color+'">'+strength+' '+favAbbr+' '+(favScore>0?'+':'')+favScore.toFixed(1)+'</span></div>';
+    }
     // Odds lines preview
     let kd = kalshi[g.gamePk];
     if (kd) {
@@ -400,11 +426,11 @@ function renderList() {
       if (kd.spreadPt != null) html += '<span class="kbtn">RL ' + (kd.spreadPt > 0 ? '+' : '') + kd.spreadPt + '</span>';
       html += '</div>';
     }
-    // Show picks for this game
-    let gamePicks = Object.keys(picks).filter(k => k.startsWith(g.gamePk + '_'));
+    // Show picks for this game (date filtered)
+    let gamePicks = Object.entries(picks).filter(([k, p]) => k.startsWith(g.gamePk + '_') && p.date === date);
     if (gamePicks.length) {
       html += '<div style="margin-top:4px">';
-      gamePicks.forEach(k => { html += '<span class="pick-tag">🎯 ' + picks[k].label + '</span>'; });
+      gamePicks.forEach(([k, p]) => { html += '<span class="pick-tag">🎯 ' + p.label + '</span>'; });
       html += '</div>';
     }
     html += `</button>`;
@@ -417,9 +443,9 @@ async function openGame(i) {
   mode = 'detail'; sel = i;
   renderNav();
   let g = games[i];
-  let totalBatters = 18; // estimate
-  let totalSteps = 3 + totalBatters; // pitchers + feed + batters
-  showLoading(0, totalSteps, 'Fetching pitcher stats...', 15);
+  let totalBatters = 18;
+  let totalSteps = 3 + totalBatters + 5; // pitchers + feed + batters + edge data
+  showLoading(0, totalSteps, 'Fetching pitcher stats...', 20);
 
   try {
     let aw = g.teams.away, hm = g.teams.home;
@@ -435,6 +461,8 @@ async function openGame(i) {
     ]);
     let apS = apData?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat || null;
     let hpS = hpData?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat || null;
+    let apHand = apData?.people?.[0]?.pitchHand?.code || null; // R or L
+    let hpHand = hpData?.people?.[0]?.pitchHand?.code || null;
     updateProgress(2, totalSteps, 'Pitchers loaded · Fetching lineup...', 15);
 
     // Step 3: Live feed
@@ -540,22 +568,212 @@ async function openGame(i) {
     let enrichedAw = allResults.slice(0, awBat.length);
     let enrichedHm = allResults.slice(awBat.length);
 
-    // Edge notes
+    // ========================================
+    // EDGE SCORE COMPUTATION
+    // ========================================
+    updateProgress(completed, totalSteps, 'Computing edge metrics...', 20);
+    
     let aW=aw.leagueRecord?.wins||0, aL=aw.leagueRecord?.losses||0;
     let hW=hm.leagueRecord?.wins||0, hL=hm.leagueRecord?.losses||0;
-    let notes = [];
-    if (aW/(aW+aL||1) > .6) notes.push(aw.team.abbreviation+' hot at '+aW+'-'+aL+'.');
-    else if (aW/(aW+aL||1) < .4) notes.push(aw.team.abbreviation+' struggling at '+aW+'-'+aL+'.');
-    if (hW/(hW+hL||1) > .6) notes.push(hm.team.abbreviation+' strong at '+hW+'-'+hL+'.');
-    else if (hW/(hW+hL||1) < .4) notes.push(hm.team.abbreviation+' cold at '+hW+'-'+hL+'.');
     let aEra = apS ? +apS.era : null, hEra = hpS ? +hpS.era : null;
-    if (aEra!=null && hEra!=null && Math.abs(aEra-hEra)>1.5) notes.push('Big pitching edge '+(aEra<hEra?aw.team.abbreviation:hm.team.abbreviation)+' — '+Math.min(aEra,hEra).toFixed(2)+' vs '+Math.max(aEra,hEra).toFixed(2)+' ERA.');
-    if (aEra!=null && aEra<2.5) notes.push((ap?.fullName||'')+' dominant ('+aEra.toFixed(2)+' ERA).');
-    if (hEra!=null && hEra<2.5) notes.push((hp?.fullName||'')+' dominant ('+hEra.toFixed(2)+' ERA).');
-    if (aEra!=null && aEra>5) notes.push((ap?.fullName||'')+' hittable — value on '+hm.team.abbreviation+'.');
-    if (hEra!=null && hEra>5) notes.push((hp?.fullName||'')+' hittable — value on '+aw.team.abbreviation+'.');
-    notes.push(hm.team.abbreviation+' bats last at home.');
-    let edgeText = notes.slice(0,5).join(' ');
+    let aFip = calcFIP(apS), hFip = calcFIP(hpS);
+
+    // --- 1. xwOBA Gap (team level) ---
+    function teamXGap(batters) {
+      let wobs = batters.filter(b => b.woba != null).map(b => b.woba);
+      let xwobs = batters.filter(b => b.xwoba != null).map(b => +b.xwoba);
+      if (!wobs.length || !xwobs.length) return null;
+      let avgW = wobs.reduce((a,b) => a+b, 0) / wobs.length;
+      let avgX = xwobs.reduce((a,b) => a+b, 0) / xwobs.length;
+      return avgX - avgW;
+    }
+    let awXGap = teamXGap(enrichedAw);
+    let hmXGap = teamXGap(enrichedHm);
+
+    // --- 2. Pitcher ERA-FIP gap (opponent's pitcher) ---
+    // Positive = pitcher has been lucky (FIP > ERA), due for regression UP (bad for batting team)
+    // Negative = pitcher has been unlucky, due for regression DOWN (good for batting team)
+    let awPitGap = (hEra != null && hFip != null) ? hFip - hEra : null; // away batting vs home pitcher
+    let hmPitGap = (aEra != null && aFip != null) ? aFip - aEra : null; // home batting vs away pitcher
+
+    // --- 3. Platoon advantage ---
+    // Fetch team batting vs LHP and vs RHP
+    let awPlatoon = null, hmPlatoon = null;
+    try {
+      let oppHand = hpHand || 'R'; // hand of pitcher the away team faces
+      let sitCode = oppHand === 'L' ? 'vl' : 'vr';
+      let [awSplitData, hmSplitData] = await Promise.all([
+        api('/api/v1/teams/'+aw.team.id+'/stats?stats=statSplits&group=hitting&season=2026&sitCodes='+sitCode),
+        api('/api/v1/teams/'+hm.team.id+'/stats?stats=statSplits&group=hitting&season=2026&sitCodes='+(apHand==='L'?'vl':'vr'))
+      ]);
+      let awSplitStat = awSplitData?.stats?.[0]?.splits?.[0]?.stat;
+      let hmSplitStat = hmSplitData?.stats?.[0]?.splits?.[0]?.stat;
+      let awSeasonData = await api('/api/v1/teams/'+aw.team.id+'/stats?stats=season&group=hitting&season=2026');
+      let hmSeasonData = await api('/api/v1/teams/'+hm.team.id+'/stats?stats=season&group=hitting&season=2026');
+      let awSeasonStat = awSeasonData?.stats?.[0]?.splits?.[0]?.stat;
+      let hmSeasonStat = hmSeasonData?.stats?.[0]?.splits?.[0]?.stat;
+      let awSplitWoba = calcWOBA(awSplitStat);
+      let hmSplitWoba = calcWOBA(hmSplitStat);
+      let awSeasonWoba = calcWOBA(awSeasonStat);
+      let hmSeasonWoba = calcWOBA(hmSeasonStat);
+      if (awSplitWoba != null && awSeasonWoba != null) awPlatoon = awSplitWoba - awSeasonWoba;
+      if (hmSplitWoba != null && hmSeasonWoba != null) hmPlatoon = hmSplitWoba - hmSeasonWoba;
+    } catch(e) { console.warn('Platoon fetch error:', e); }
+    updateProgress(completed + 2, totalSteps, 'Checking bullpen fatigue & rest...', 20);
+    // --- 4. BvP concentration ---
+    let awBvpCount = enrichedAw.filter(b => b.bvpWoba != null && b.bvpAB >= 3 && b.bvpWoba > .370).length;
+    let hmBvpCount = enrichedHm.filter(b => b.bvpWoba != null && b.bvpAB >= 3 && b.bvpWoba > .370).length;
+
+    // --- 5. Park factor ---
+    let parkTeam = hm.team.abbreviation;
+    let parkFactor = PARK[parkTeam] || 1.00;
+
+    // --- 6. Bullpen fatigue + 7. Rest advantage ---
+    let awBullpenFatigue = false, hmBullpenFatigue = false;
+    let awRested = false, hmRested = false;
+    try {
+      let yesterday = new Date(g.gameDate);
+      yesterday.setDate(yesterday.getDate() - 1);
+      let yStr = yesterday.toISOString().slice(0,10);
+      let yData = await api('/api/v1/schedule?sportId=1&date='+yStr+'&hydrate=linescore,team');
+      let yGames = yData?.dates?.[0]?.games || [];
+      
+      let awYesterday = yGames.find(yg => yg.teams.away.team.id === aw.team.id || yg.teams.home.team.id === aw.team.id);
+      let hmYesterday = yGames.find(yg => yg.teams.away.team.id === hm.team.id || yg.teams.home.team.id === hm.team.id);
+      
+      awRested = !awYesterday;
+      hmRested = !hmYesterday;
+
+      // Check bullpen usage from yesterday's boxscore
+      async function checkBullpen(yGame, teamId) {
+        if (!yGame) return false;
+        try {
+          let yFeed = await api('/api/v1.1/game/'+yGame.gamePk+'/feed/live');
+          let yBox = yFeed?.liveData?.boxscore;
+          if (!yBox) return false;
+          let side = yBox.teams.away.team?.id === teamId ? 'away' : 'home';
+          let pIds = yBox.teams[side]?.pitchers || [];
+          let starterId = yBox.teams[side]?.battingOrder ? null : null; // just check all pitchers
+          let highUsage = false;
+          pIds.forEach(pid => {
+            let p = yBox.teams[side].players['ID'+pid];
+            let ps = p?.stats?.pitching;
+            if (ps && !p?.gameStatus?.isOnBench) {
+              let pitches = ps.numberOfPitches || ps.pitchesThrown || 0;
+              let ip = parseFloat(ps.inningsPitched || 0);
+              // Reliever who threw 25+ pitches or 2+ IP
+              if (ip > 0 && ip < 5 && pitches >= 25) highUsage = true;
+            }
+          });
+          return highUsage;
+        } catch(e) { return false; }
+      }
+      [awBullpenFatigue, hmBullpenFatigue] = await Promise.all([
+        checkBullpen(hmYesterday, hm.team.id), // home team's bullpen = opponent's bullpen for away edge
+        checkBullpen(awYesterday, aw.team.id)  // away team's bullpen = opponent's bullpen for home edge
+      ]);
+    } catch(e) { console.warn('Rest/bullpen error:', e); }
+
+    // ========================================
+    // COMPUTE EDGE SCORES (per team)
+    // ========================================
+    function computeEdge(label, xGap, pitGap, platoon, bvpCount, parkF, oppBullpenFatigue, rested) {
+      let score = 0;
+      let breakdown = [];
+
+      // xwOBA Gap (weight 100)
+      if (xGap != null) {
+        let pts = xGap * 100;
+        score += pts;
+        let dir = xGap > 0 ? 'unlucky, due for breakout' : 'overperforming, due for regression';
+        breakdown.push({ label: 'xwOBA Gap', value: (xGap>0?'+':'')+xGap.toFixed(3), pts: pts.toFixed(1), note: dir, color: xGap > 0 ? '#34d399' : '#f87171' });
+      }
+
+      // Pitcher ERA-FIP gap (weight 10)
+      if (pitGap != null) {
+        let pts = pitGap * 10; // positive FIP-ERA means pitcher is due to get worse = good for this team
+        score += pts;
+        let dir = pitGap > 0 ? 'pitcher has been lucky, due to regress' : 'pitcher has been unlucky, tough matchup';
+        breakdown.push({ label: 'Pitcher FIP-ERA', value: (pitGap>0?'+':'')+pitGap.toFixed(2), pts: pts.toFixed(1), note: dir, color: pitGap > 0 ? '#34d399' : '#f87171' });
+      }
+
+      // Platoon (weight 20)
+      if (platoon != null) {
+        let pts = platoon * 20;
+        score += pts;
+        let dir = platoon > 0 ? 'lineup hits better vs this hand' : 'lineup struggles vs this hand';
+        breakdown.push({ label: 'Platoon', value: (platoon>0?'+':'')+platoon.toFixed(3)+' wOBA', pts: pts.toFixed(1), note: dir, color: platoon > 0 ? '#34d399' : '#f87171' });
+      }
+
+      // BvP concentration (weight 3 each)
+      if (bvpCount > 0) {
+        let pts = bvpCount * 3;
+        score += pts;
+        breakdown.push({ label: 'BvP Crushers', value: bvpCount + ' of 9', pts: '+'+pts.toFixed(1), note: bvpCount+'+ batters own this pitcher (.370+)', color: '#f59e0b' });
+      }
+
+      // Park factor (weight 5)
+      let parkPts = (parkF - 1.0) * 5;
+      if (Math.abs(parkPts) > 0.01) {
+        score += parkPts;
+        let dir = parkF > 1.0 ? 'hitter friendly park' : 'pitcher friendly park';
+        breakdown.push({ label: 'Park Factor', value: parkF.toFixed(2), pts: (parkPts>0?'+':'')+parkPts.toFixed(1), note: dir, color: parkF > 1.0 ? '#34d399' : '#38bdf8' });
+      }
+
+      // Bullpen fatigue (weight 4)
+      if (oppBullpenFatigue) {
+        score += 4;
+        breakdown.push({ label: 'Bullpen Fatigue', value: 'YES', pts: '+4.0', note: 'opponent relievers threw 25+ pitches yesterday', color: '#34d399' });
+      }
+
+      // Rest advantage (weight 2)
+      if (rested) {
+        score += 2;
+        breakdown.push({ label: 'Rest', value: 'Off day yesterday', pts: '+2.0', note: 'fresh legs, full bullpen', color: '#34d399' });
+      }
+
+      return { score, breakdown };
+    }
+
+    let awEdge = computeEdge(aw.team.abbreviation, awXGap, awPitGap, awPlatoon, awBvpCount, parkFactor, awBullpenFatigue, awRested);
+    let hmEdge = computeEdge(hm.team.abbreviation, hmXGap, hmPitGap, hmPlatoon, hmBvpCount, parkFactor, hmBullpenFatigue, hmRested);
+
+    // Cache for homepage display
+    edgeCache[g.gamePk] = { awScore: awEdge.score, hmScore: hmEdge.score, awAbbr: aw.team.abbreviation, hmAbbr: hm.team.abbreviation };
+
+    // ========================================
+    // RENDER EDGE BANNER
+    // ========================================
+    function renderEdgeBanner(teamAbbr, edge, record) {
+      let s = edge.score;
+      let color = s > 10 ? '#34d399' : s > 0 ? '#a1a1aa' : s > -10 ? '#f87171' : '#ef4444';
+      let strength = Math.abs(s) > 20 ? 'STRONG' : Math.abs(s) > 10 ? 'MODERATE' : 'SLIGHT';
+      let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+      html += '<span style="font-size:11px;font-weight:700;color:#fafafa">'+teamAbbr+' ('+record+')</span>';
+      html += '<span style="font-size:14px;font-weight:800;font-family:monospace;color:'+color+'">'+(s>0?'+':'')+s.toFixed(1)+'</span>';
+      html += '</div>';
+      edge.breakdown.forEach(b => {
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid rgba(39,39,42,.3)">';
+        html += '<span style="font-size:9px;color:#a1a1aa">'+b.label+'</span>';
+        html += '<span style="font-size:9px;font-family:monospace;color:'+b.color+'">'+b.value+' ('+b.pts+' pts)</span>';
+        html += '</div>';
+        html += '<div style="font-size:8px;color:#52525b;padding:1px 0 3px">'+b.note+'</div>';
+      });
+      if (!edge.breakdown.length) {
+        html += '<div style="font-size:9px;color:#52525b;padding:4px 0">Insufficient data for edge calculation</div>';
+      }
+      return html;
+    }
+
+    // Determine which team has the edge
+    let favTeam = awEdge.score >= hmEdge.score ? aw.team.abbreviation : hm.team.abbreviation;
+    let favScore = Math.max(awEdge.score, hmEdge.score);
+    let edgeDiff = Math.abs(awEdge.score - hmEdge.score);
+    let edgeVerdict = '';
+    if (edgeDiff > 20) edgeVerdict = 'Strong edge on ' + favTeam;
+    else if (edgeDiff > 10) edgeVerdict = 'Moderate edge on ' + favTeam;
+    else if (edgeDiff > 5) edgeVerdict = 'Slight edge on ' + favTeam;
+    else edgeVerdict = 'Toss-up — no clear analytical edge';
 
     // === RENDER ===
     let html = '';
@@ -573,8 +791,13 @@ async function openGame(i) {
     }
     html += '</div>';
 
-    // Edge
-    html += '<details class="edge"><summary style="cursor:pointer;font-weight:700;font-size:10px;color:#f59e0b;letter-spacing:1px">EDGE NOTES ▾</summary><p style="margin-top:6px">'+edgeText+'</p></details>';
+    // Edge banner
+    html += '<details class="edge" open><summary style="cursor:pointer;font-weight:700;font-size:10px;color:#f59e0b;letter-spacing:1px">EDGE ANALYSIS · '+edgeVerdict+' ▾</summary>';
+    html += '<div style="margin-top:8px">';
+    html += renderEdgeBanner(aw.team.abbreviation, awEdge, aW+'-'+aL);
+    html += '<div style="border-top:1px solid rgba(245,158,11,.2);margin:10px 0"></div>';
+    html += renderEdgeBanner(hm.team.abbreviation, hmEdge, hW+'-'+hL);
+    html += '</div></details>';
 
     // Linescore
     if (lsd?.innings?.length && (isL||isF)) {
@@ -734,11 +957,22 @@ function refresh() {
 function makePick(gamePk, type, price, label, side) {
   let key = gamePk + '_' + type;
   if (picks[key] && picks[key].side === (side||type)) { delete picks[key]; }
-  else { picks[key] = { type, side: side||type, price, label, ts: Date.now() }; }
+  else { picks[key] = { type, side: side||type, price, label, date: date, ts: Date.now() }; }
   savePicks();
-  // Re-render current view
   if (mode === 'detail' && sel !== null) openGame(sel);
   else if (mode === 'list') renderList();
+}
+
+function clearAllPicks() {
+  // Only clear picks for the current date
+  let dayKeys = Object.entries(picks).filter(([k, p]) => p.date === date).map(([k]) => k);
+  if (!dayKeys.length) return;
+  let conf = confirm('Clear all ' + dayKeys.length + ' picks for ' + prettyDate() + '? This cannot be undone.');
+  if (conf) {
+    dayKeys.forEach(k => delete picks[k]);
+    savePicks();
+    renderList();
+  }
 }
 
 // Start
