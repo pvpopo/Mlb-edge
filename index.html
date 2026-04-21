@@ -681,55 +681,69 @@ async function openGame(i) {
       let score = 0;
       let breakdown = [];
 
-      // xwOBA Gap (weight 100)
+      // Helper: clamp points to a max absolute value
+      function clamp(pts, max) { return Math.max(-max, Math.min(max, pts)); }
+
+      // 1. xwOBA Gap (weight 100, capped ±8)
       if (xGap != null) {
-        let pts = xGap * 100;
+        let pts = clamp(xGap * 100, 8);
         score += pts;
         let dir = xGap > 0 ? 'unlucky, due for breakout' : 'overperforming, due for regression';
-        breakdown.push({ label: 'xwOBA Gap', value: (xGap>0?'+':'')+xGap.toFixed(3), pts: pts.toFixed(1), note: dir, color: xGap > 0 ? '#34d399' : '#f87171' });
+        breakdown.push({ label: 'xwOBA Gap', value: (xGap>0?'+':'')+xGap.toFixed(3), pts: (pts>0?'+':'')+pts.toFixed(1), note: dir, color: xGap > 0 ? '#34d399' : '#f87171' });
+      } else {
+        breakdown.push({ label: 'xwOBA Gap', value: 'N/A', pts: '—', note: 'need Savant data', color: '#52525b' });
       }
 
-      // Pitcher ERA-FIP gap (weight 10)
+      // 2. Pitcher ERA-FIP gap (weight 10, capped ±15)
       if (pitGap != null) {
-        let pts = pitGap * 10; // positive FIP-ERA means pitcher is due to get worse = good for this team
+        let pts = clamp(pitGap * 10, 15);
         score += pts;
-        let dir = pitGap > 0 ? 'pitcher has been lucky, due to regress' : 'pitcher has been unlucky, tough matchup';
-        breakdown.push({ label: 'Pitcher FIP-ERA', value: (pitGap>0?'+':'')+pitGap.toFixed(2), pts: pts.toFixed(1), note: dir, color: pitGap > 0 ? '#34d399' : '#f87171' });
+        let dir = pitGap > 0 ? 'opp. pitcher has been lucky, due to regress' : 'opp. pitcher unlucky, tough matchup';
+        breakdown.push({ label: 'Pitcher FIP-ERA', value: (pitGap>0?'+':'')+pitGap.toFixed(2), pts: (pts>0?'+':'')+pts.toFixed(1), note: dir, color: pitGap > 0 ? '#34d399' : '#f87171' });
+      } else {
+        breakdown.push({ label: 'Pitcher FIP-ERA', value: 'N/A', pts: '—', note: 'pitcher TBD', color: '#52525b' });
       }
 
-      // Platoon (weight 20)
+      // 3. Platoon (weight 20, capped ±5)
       if (platoon != null) {
-        let pts = platoon * 20;
+        let pts = clamp(platoon * 20, 5);
         score += pts;
         let dir = platoon > 0 ? 'lineup hits better vs this hand' : 'lineup struggles vs this hand';
-        breakdown.push({ label: 'Platoon', value: (platoon>0?'+':'')+platoon.toFixed(3)+' wOBA', pts: pts.toFixed(1), note: dir, color: platoon > 0 ? '#34d399' : '#f87171' });
+        breakdown.push({ label: 'Platoon', value: (platoon>0?'+':'')+platoon.toFixed(3)+' wOBA', pts: (pts>0?'+':'')+pts.toFixed(1), note: dir, color: platoon > 0 ? '#34d399' : '#f87171' });
+      } else {
+        breakdown.push({ label: 'Platoon', value: 'N/A', pts: '—', note: 'need pitcher hand data', color: '#52525b' });
       }
 
-      // BvP concentration (weight 3 each)
+      // 4. BvP concentration (3 per batter, capped +12)
+      let bvpPts = clamp(bvpCount * 3, 12);
+      score += bvpPts;
       if (bvpCount > 0) {
-        let pts = bvpCount * 3;
-        score += pts;
-        breakdown.push({ label: 'BvP Crushers', value: bvpCount + ' of 9', pts: '+'+pts.toFixed(1), note: bvpCount+'+ batters own this pitcher (.370+)', color: '#f59e0b' });
+        breakdown.push({ label: 'BvP Crushers', value: bvpCount + ' of 9', pts: '+'+bvpPts.toFixed(1), note: bvpCount+' batters own this pitcher (.370+ career wOBA)', color: '#f59e0b' });
+      } else {
+        breakdown.push({ label: 'BvP Crushers', value: '0 of 9', pts: '0.0', note: 'no batters with .370+ career wOBA vs this pitcher', color: '#52525b' });
       }
 
-      // Park factor (weight 5)
-      let parkPts = (parkF - 1.0) * 5;
-      if (Math.abs(parkPts) > 0.01) {
-        score += parkPts;
-        let dir = parkF > 1.0 ? 'hitter friendly park' : 'pitcher friendly park';
-        breakdown.push({ label: 'Park Factor', value: parkF.toFixed(2), pts: (parkPts>0?'+':'')+parkPts.toFixed(1), note: dir, color: parkF > 1.0 ? '#34d399' : '#38bdf8' });
-      }
+      // 5. Park factor (weight 5, capped ±2)
+      let parkPts = clamp((parkF - 1.0) * 5, 2);
+      score += parkPts;
+      let parkDir = parkF > 1.02 ? 'hitter friendly park' : parkF < 0.98 ? 'pitcher friendly park' : 'neutral park';
+      let parkColor = parkF > 1.02 ? '#34d399' : parkF < 0.98 ? '#38bdf8' : '#52525b';
+      breakdown.push({ label: 'Park Factor', value: parkF.toFixed(2), pts: (parkPts>0?'+':'')+parkPts.toFixed(1), note: parkDir, color: parkColor });
 
-      // Bullpen fatigue (weight 4)
+      // 6. Bullpen fatigue (flat +4)
       if (oppBullpenFatigue) {
         score += 4;
-        breakdown.push({ label: 'Bullpen Fatigue', value: 'YES', pts: '+4.0', note: 'opponent relievers threw 25+ pitches yesterday', color: '#34d399' });
+        breakdown.push({ label: 'Bullpen Fatigue', value: 'YES', pts: '+4.0', note: 'opp. relievers threw 25+ pitches yesterday', color: '#34d399' });
+      } else {
+        breakdown.push({ label: 'Bullpen Fatigue', value: 'No', pts: '0.0', note: 'opp. bullpen is rested', color: '#52525b' });
       }
 
-      // Rest advantage (weight 2)
+      // 7. Rest advantage (flat +2)
       if (rested) {
         score += 2;
-        breakdown.push({ label: 'Rest', value: 'Off day yesterday', pts: '+2.0', note: 'fresh legs, full bullpen', color: '#34d399' });
+        breakdown.push({ label: 'Rest', value: 'Off day', pts: '+2.0', note: 'fresh legs, full bullpen', color: '#34d399' });
+      } else {
+        breakdown.push({ label: 'Rest', value: 'Played', pts: '0.0', note: 'played yesterday', color: '#52525b' });
       }
 
       return { score, breakdown };
