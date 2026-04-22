@@ -371,6 +371,111 @@ async function load() {
   $('sub').textContent = statusParts.join(' · ');
   renderNav();
   renderList();
+
+  // Background: scan all games for edge scores
+  edgeCache = {};
+  scanAllEdges();
+}
+
+// --- Auto-scan edge scores for all games ---
+async function scanAllEdges() {
+  $('sub').textContent += ' · SCANNING EDGES...';
+  
+  // Fetch all pitcher stats in parallel (2 per game)
+  let pitcherFetches = games.map(async g => {
+    let ap = g.teams.away.probablePitcher;
+    let hp = g.teams.home.probablePitcher;
+    let [apD, hpD] = await Promise.all([
+      ap ? api('/api/v1/people/'+ap.id+'?hydrate=stats(group=[pitching],type=[season],season=2026)') : null,
+      hp ? api('/api/v1/people/'+hp.id+'?hydrate=stats(group=[pitching],type=[season],season=2026)') : null
+    ]);
+    return {
+      gamePk: g.gamePk,
+      awAbbr: g.teams.away.team.abbreviation,
+      hmAbbr: g.teams.home.team.abbreviation,
+      apS: apD?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat || null,
+      hpS: hpD?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat || null,
+      apHand: apD?.people?.[0]?.pitchHand?.code || null,
+      hpHand: hpD?.people?.[0]?.pitchHand?.code || null
+    };
+  });
+  
+  let results = await Promise.all(pitcherFetches);
+  
+  // Compute quick edge for each game
+  results.forEach(r => {
+    let g = games.find(g => g.gamePk === r.gamePk);
+    if (!g) return;
+    let aw = g.teams.away, hm = g.teams.home;
+    
+    // Get team xwOBA/wOBA from Savant for each lineup
+    // Use boxscore batting order if available, otherwise roster estimate
+    // For quick scan, estimate from any players on this team in Savant data
+    function teamSavantAvg(teamId) {
+      // Find players on this team from savant data
+      // We don't have team IDs in savant, so we'll skip team-level for quick scan
+      return null;
+    }
+    
+    // Compute edge using pitcher quality + pitcher luck + park
+    let parkF = PARK[hm.team.abbreviation] || 1.00;
+    
+    let awEdge = computeQuickEdge(r.hpS, r.apS, parkF); // away team faces home pitcher
+    let hmEdge = computeQuickEdge(r.apS, r.hpS, parkF); // home team faces away pitcher
+    
+    edgeCache[r.gamePk] = {
+      awScore: awEdge.score, hmScore: hmEdge.score,
+      awAbbr: aw.team.abbreviation, hmAbbr: hm.team.abbreviation,
+      awBreakdown: awEdge.breakdown, hmBreakdown: hmEdge.breakdown
+    };
+  });
+  
+  let svCount = Object.keys(savant).length;
+  let kCount = Object.keys(kalshi).length;
+  let statusParts = [games.length + ' GAMES'];
+  if (svCount) statusParts.push('SAVANT ✓');
+  if (kCount) statusParts.push('ODDS ✓');
+  statusParts.push('EDGE ✓');
+  $('sub').textContent = statusParts.join(' · ');
+  renderList(); // re-render with edge scores
+}
+
+// Quick edge: pitcher quality + luck + park (no lineup data needed)
+function computeQuickEdge(oppPitStat, ownPitStat, parkF) {
+  let score = 0;
+  let breakdown = [];
+  function clamp(v, max) { return Math.max(-max, Math.min(max, v)); }
+  
+  // Opponent pitcher absolute quality (FIP-based)
+  // League avg FIP ~4.20. Lower = tougher for batting team.
+  if (oppPitStat) {
+    let fip = calcFIP(oppPitStat);
+    if (fip != null) {
+      let pts = clamp((fip - 4.20) * 3, 10);
+      score += pts;
+      let quality = fip < 3.0 ? 'elite arm' : fip < 3.8 ? 'above avg' : fip < 4.5 ? 'average' : 'below avg arm';
+      breakdown.push({ label: 'Opp. Pitcher Quality', value: fip.toFixed(2)+' FIP', pts: (pts>0?'+':'')+pts.toFixed(1), note: 'facing '+quality, color: pts > 0 ? '#34d399' : '#f87171' });
+      
+      // Luck signal (secondary — capped lower than quality)
+      let era = +oppPitStat.era;
+      if (!isNaN(era)) {
+        let luckPts = clamp((fip - era) * 1.5, 3);
+        score += luckPts;
+        let dir = luckPts > 0 ? 'opp. pitcher ERA unsustainably low' : 'opp. pitcher may pitch better than ERA shows';
+        breakdown.push({ label: 'Opp. Pitcher Luck', value: era.toFixed(2)+' ERA vs '+fip.toFixed(2)+' FIP', pts: (luckPts>0?'+':'')+luckPts.toFixed(1), note: dir, color: luckPts > 0 ? '#34d399' : '#f87171' });
+      }
+    }
+  } else {
+    breakdown.push({ label: 'Opp. Pitcher', value: 'TBD', pts: '—', note: 'no pitcher data', color: '#52525b' });
+  }
+  
+  // Park factor
+  let parkPts = clamp((parkF - 1.0) * 5, 2);
+  score += parkPts;
+  let parkDir = parkF > 1.02 ? 'hitter friendly' : parkF < 0.98 ? 'pitcher friendly' : 'neutral';
+  breakdown.push({ label: 'Park', value: parkF.toFixed(2), pts: (parkPts>0?'+':'')+parkPts.toFixed(1), note: parkDir, color: parkF > 1.02 ? '#34d399' : parkF < 0.98 ? '#38bdf8' : '#52525b' });
+  
+  return { score, breakdown };
 }
 
 function renderList() {
@@ -578,23 +683,22 @@ async function openGame(i) {
     let aEra = apS ? +apS.era : null, hEra = hpS ? +hpS.era : null;
     let aFip = calcFIP(apS), hFip = calcFIP(hpS);
 
-    // --- 1. xwOBA Gap (team level) ---
-    function teamXGap(batters) {
+    // --- 1. Team offensive quality + luck ---
+    function teamOffenseMetrics(batters) {
       let wobs = batters.filter(b => b.woba != null).map(b => b.woba);
       let xwobs = batters.filter(b => b.xwoba != null).map(b => +b.xwoba);
-      if (!wobs.length || !xwobs.length) return null;
-      let avgW = wobs.reduce((a,b) => a+b, 0) / wobs.length;
-      let avgX = xwobs.reduce((a,b) => a+b, 0) / xwobs.length;
-      return avgX - avgW;
+      let avgW = wobs.length ? wobs.reduce((a,b) => a+b, 0) / wobs.length : null;
+      let avgX = xwobs.length ? xwobs.reduce((a,b) => a+b, 0) / xwobs.length : null;
+      let gap = (avgX != null && avgW != null) ? avgX - avgW : null;
+      return { woba: avgW, xwoba: avgX, gap };
     }
-    let awXGap = teamXGap(enrichedAw);
-    let hmXGap = teamXGap(enrichedHm);
+    let awOff = teamOffenseMetrics(enrichedAw);
+    let hmOff = teamOffenseMetrics(enrichedHm);
 
-    // --- 2. Pitcher ERA-FIP gap (opponent's pitcher) ---
-    // Positive = pitcher has been lucky (FIP > ERA), due for regression UP (bad for batting team)
-    // Negative = pitcher has been unlucky, due for regression DOWN (good for batting team)
-    let awPitGap = (hEra != null && hFip != null) ? hFip - hEra : null; // away batting vs home pitcher
-    let hmPitGap = (aEra != null && aFip != null) ? aFip - aEra : null; // home batting vs away pitcher
+    // --- 2. Opponent pitcher quality + luck ---
+    // Away team faces home pitcher, home team faces away pitcher
+    let awOppFip = hFip, awOppEra = hEra; // away team faces home pitcher
+    let hmOppFip = aFip, hmOppEra = aEra; // home team faces away pitcher
 
     // --- 3. Platoon advantage ---
     // Fetch team batting vs LHP and vs RHP
@@ -677,34 +781,63 @@ async function openGame(i) {
     // ========================================
     // COMPUTE EDGE SCORES (per team)
     // ========================================
-    function computeEdge(label, xGap, pitGap, platoon, bvpCount, parkF, oppBullpenFatigue, rested) {
+    function computeEdge(off, oppFip, oppEra, platoon, bvpCount, parkF, oppBullpenFatigue, rested) {
       let score = 0;
       let breakdown = [];
+      function clamp(v, max) { return Math.max(-max, Math.min(max, v)); }
 
-      // Helper: clamp points to a max absolute value
-      function clamp(pts, max) { return Math.max(-max, Math.min(max, pts)); }
-
-      // 1. xwOBA Gap (weight 100, capped ±8)
-      if (xGap != null) {
-        let pts = clamp(xGap * 100, 8);
+      // --- OFFENSE ---
+      // 1. Lineup xwOBA Level (absolute quality, .310 = league avg)
+      if (off.xwoba != null) {
+        let pts = clamp((off.xwoba - 0.310) * 50, 8);
         score += pts;
-        let dir = xGap > 0 ? 'unlucky, due for breakout' : 'overperforming, due for regression';
-        breakdown.push({ label: 'xwOBA Gap', value: (xGap>0?'+':'')+xGap.toFixed(3), pts: (pts>0?'+':'')+pts.toFixed(1), note: dir, color: xGap > 0 ? '#34d399' : '#f87171' });
+        let quality = off.xwoba > .340 ? 'strong offense' : off.xwoba > .320 ? 'above avg offense' : off.xwoba > .300 ? 'avg offense' : 'weak offense';
+        breakdown.push({ label: 'Lineup Quality', value: off.xwoba.toFixed(3)+' xwOBA', pts: (pts>0?'+':'')+pts.toFixed(1), note: quality, color: off.xwoba > .320 ? '#34d399' : off.xwoba < .300 ? '#f87171' : '#a1a1aa' });
+      } else if (off.woba != null) {
+        let pts = clamp((off.woba - 0.310) * 50, 8);
+        score += pts;
+        let quality = off.woba > .340 ? 'strong offense' : off.woba > .320 ? 'above avg offense' : off.woba > .300 ? 'avg offense' : 'weak offense';
+        breakdown.push({ label: 'Lineup Quality', value: off.woba.toFixed(3)+' wOBA', pts: (pts>0?'+':'')+pts.toFixed(1), note: quality+' (no Savant)', color: off.woba > .320 ? '#34d399' : off.woba < .300 ? '#f87171' : '#a1a1aa' });
       } else {
-        breakdown.push({ label: 'xwOBA Gap', value: 'N/A', pts: '—', note: 'need Savant data', color: '#52525b' });
+        breakdown.push({ label: 'Lineup Quality', value: 'N/A', pts: '—', note: 'no lineup data', color: '#52525b' });
       }
 
-      // 2. Pitcher ERA-FIP gap (weight 10, capped ±15)
-      if (pitGap != null) {
-        let pts = clamp(pitGap * 10, 15);
+      // 2. Lineup Luck (xwOBA - wOBA gap — secondary to quality)
+      if (off.gap != null) {
+        let pts = clamp(off.gap * 20, 3);
         score += pts;
-        let dir = pitGap > 0 ? 'opp. pitcher has been lucky, due to regress' : 'opp. pitcher unlucky, tough matchup';
-        breakdown.push({ label: 'Pitcher FIP-ERA', value: (pitGap>0?'+':'')+pitGap.toFixed(2), pts: (pts>0?'+':'')+pts.toFixed(1), note: dir, color: pitGap > 0 ? '#34d399' : '#f87171' });
+        let dir = off.gap > .01 ? 'slightly unlucky, may improve' : off.gap < -.01 ? 'slightly lucky, may regress' : 'performing near expected';
+        breakdown.push({ label: 'Lineup Luck', value: (off.gap>0?'+':'')+off.gap.toFixed(3), pts: (pts>0?'+':'')+pts.toFixed(1), note: dir, color: off.gap > .01 ? '#34d399' : off.gap < -.01 ? '#f87171' : '#a1a1aa' });
       } else {
-        breakdown.push({ label: 'Pitcher FIP-ERA', value: 'N/A', pts: '—', note: 'pitcher TBD', color: '#52525b' });
+        breakdown.push({ label: 'Lineup Luck', value: 'N/A', pts: '—', note: 'need Savant data', color: '#52525b' });
       }
 
-      // 3. Platoon (weight 20, capped ±5)
+      // --- PITCHING (opponent) ---
+      // 3. Opp. Pitcher Quality (FIP-based, 4.20 = avg)
+      if (oppFip != null) {
+        let pts = clamp((oppFip - 4.20) * 3, 10);
+        score += pts;
+        let quality = oppFip < 2.5 ? 'facing ace' : oppFip < 3.5 ? 'facing strong arm' : oppFip < 4.5 ? 'facing avg pitcher' : 'facing weak pitcher';
+        breakdown.push({ label: 'Opp. Pitcher Quality', value: oppFip.toFixed(2)+' FIP', pts: (pts>0?'+':'')+pts.toFixed(1), note: quality, color: oppFip > 4.2 ? '#34d399' : oppFip < 3.5 ? '#f87171' : '#a1a1aa' });
+      } else {
+        breakdown.push({ label: 'Opp. Pitcher Quality', value: 'TBD', pts: '—', note: 'pitcher not announced', color: '#52525b' });
+      }
+
+      // 4. Opp. Pitcher Luck (FIP - ERA — secondary to quality)
+      // Positive FIP-ERA means pitcher has outperformed skills (lucky) — expect regression = good for batting team
+      // But capped low so it can't override pitcher quality
+      if (oppFip != null && oppEra != null) {
+        let gap = oppFip - oppEra;
+        let pts = clamp(gap * 1.5, 3);
+        score += pts;
+        let dir = gap > 0.5 ? 'opp. pitcher ERA unsustainably low — expect more runs allowed' : gap < -0.5 ? 'opp. pitcher ERA inflated — may pitch better than record shows' : 'ERA and skills aligned';
+        breakdown.push({ label: 'Opp. Pitcher Luck', value: oppEra.toFixed(2)+' ERA vs '+oppFip.toFixed(2)+' FIP', pts: (pts>0?'+':'')+pts.toFixed(1), note: dir, color: gap > 0.5 ? '#34d399' : gap < -0.5 ? '#f87171' : '#a1a1aa' });
+      } else {
+        breakdown.push({ label: 'Opp. Pitcher Luck', value: 'N/A', pts: '—', note: 'pitcher TBD', color: '#52525b' });
+      }
+
+      // --- MATCHUP ---
+      // 5. Platoon (weight 20, capped ±5)
       if (platoon != null) {
         let pts = clamp(platoon * 20, 5);
         score += pts;
@@ -714,43 +847,30 @@ async function openGame(i) {
         breakdown.push({ label: 'Platoon', value: 'N/A', pts: '—', note: 'need pitcher hand data', color: '#52525b' });
       }
 
-      // 4. BvP concentration (3 per batter, capped +12)
+      // 6. BvP concentration (3 per batter, capped +12)
       let bvpPts = clamp(bvpCount * 3, 12);
       score += bvpPts;
-      if (bvpCount > 0) {
-        breakdown.push({ label: 'BvP Crushers', value: bvpCount + ' of 9', pts: '+'+bvpPts.toFixed(1), note: bvpCount+' batters own this pitcher (.370+ career wOBA)', color: '#f59e0b' });
-      } else {
-        breakdown.push({ label: 'BvP Crushers', value: '0 of 9', pts: '0.0', note: 'no batters with .370+ career wOBA vs this pitcher', color: '#52525b' });
-      }
+      breakdown.push({ label: 'BvP Crushers', value: bvpCount + ' of 9', pts: bvpPts > 0 ? '+'+bvpPts.toFixed(1) : '0.0', note: bvpCount > 0 ? bvpCount+' batters own this pitcher (.370+ career)' : 'no batters with strong history', color: bvpCount > 0 ? '#f59e0b' : '#52525b' });
 
-      // 5. Park factor (weight 5, capped ±2)
+      // --- SITUATIONAL ---
+      // 7. Park factor (weight 5, capped ±2)
       let parkPts = clamp((parkF - 1.0) * 5, 2);
       score += parkPts;
-      let parkDir = parkF > 1.02 ? 'hitter friendly park' : parkF < 0.98 ? 'pitcher friendly park' : 'neutral park';
-      let parkColor = parkF > 1.02 ? '#34d399' : parkF < 0.98 ? '#38bdf8' : '#52525b';
-      breakdown.push({ label: 'Park Factor', value: parkF.toFixed(2), pts: (parkPts>0?'+':'')+parkPts.toFixed(1), note: parkDir, color: parkColor });
+      breakdown.push({ label: 'Park Factor', value: parkF.toFixed(2), pts: (parkPts>0?'+':'')+parkPts.toFixed(1), note: parkF > 1.02 ? 'hitter friendly' : parkF < 0.98 ? 'pitcher friendly' : 'neutral', color: parkF > 1.02 ? '#34d399' : parkF < 0.98 ? '#38bdf8' : '#52525b' });
 
-      // 6. Bullpen fatigue (flat +4)
-      if (oppBullpenFatigue) {
-        score += 4;
-        breakdown.push({ label: 'Bullpen Fatigue', value: 'YES', pts: '+4.0', note: 'opp. relievers threw 25+ pitches yesterday', color: '#34d399' });
-      } else {
-        breakdown.push({ label: 'Bullpen Fatigue', value: 'No', pts: '0.0', note: 'opp. bullpen is rested', color: '#52525b' });
-      }
+      // 8. Bullpen fatigue (flat +4)
+      breakdown.push({ label: 'Bullpen Fatigue', value: oppBullpenFatigue ? 'YES' : 'No', pts: oppBullpenFatigue ? '+4.0' : '0.0', note: oppBullpenFatigue ? 'opp. relievers overworked yesterday' : 'opp. bullpen rested', color: oppBullpenFatigue ? '#34d399' : '#52525b' });
+      if (oppBullpenFatigue) score += 4;
 
-      // 7. Rest advantage (flat +2)
-      if (rested) {
-        score += 2;
-        breakdown.push({ label: 'Rest', value: 'Off day', pts: '+2.0', note: 'fresh legs, full bullpen', color: '#34d399' });
-      } else {
-        breakdown.push({ label: 'Rest', value: 'Played', pts: '0.0', note: 'played yesterday', color: '#52525b' });
-      }
+      // 9. Rest advantage (flat +2)
+      breakdown.push({ label: 'Rest', value: rested ? 'Off day' : 'Played', pts: rested ? '+2.0' : '0.0', note: rested ? 'fresh legs, full bullpen' : 'played yesterday', color: rested ? '#34d399' : '#52525b' });
+      if (rested) score += 2;
 
       return { score, breakdown };
     }
 
-    let awEdge = computeEdge(aw.team.abbreviation, awXGap, awPitGap, awPlatoon, awBvpCount, parkFactor, awBullpenFatigue, awRested);
-    let hmEdge = computeEdge(hm.team.abbreviation, hmXGap, hmPitGap, hmPlatoon, hmBvpCount, parkFactor, hmBullpenFatigue, hmRested);
+    let awEdge = computeEdge(awOff, awOppFip, awOppEra, awPlatoon, awBvpCount, parkFactor, awBullpenFatigue, awRested);
+    let hmEdge = computeEdge(hmOff, hmOppFip, hmOppEra, hmPlatoon, hmBvpCount, parkFactor, hmBullpenFatigue, hmRested);
 
     // Cache for homepage display
     edgeCache[g.gamePk] = { awScore: awEdge.score, hmScore: hmEdge.score, awAbbr: aw.team.abbreviation, hmAbbr: hm.team.abbreviation };
