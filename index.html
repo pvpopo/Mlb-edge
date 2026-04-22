@@ -510,16 +510,14 @@ function renderList() {
       let aR = ls.teams?.away?.runs ?? 0, hR = ls.teams?.home?.runs ?? 0;
       html += `<div class="scorebar"><span style="font-size:11px;font-weight:600">${aw.team.abbreviation}</span><span class="num ${isF&&aR>hR?'w':''}">${aR}</span><span style="font-size:9px;color:${isL?'#a3e635':'#52525b'}">${isL?((ls.isTopInning?'▲':'▼')+' '+(ls.currentInningOrdinal||'')):g.status?.detailedState||''}</span><span class="num ${isF&&hR>aR?'w':''}">${hR}</span><span style="font-size:11px;font-weight:600">${hm.team.abbreviation}</span></div>`;
     }
-    // Edge score preview (from cache)
+    // Edge score preview (from cache) — shows DELTA between teams
     let ec = edgeCache[g.gamePk];
     if (ec) {
-      let diff = ec.awScore - ec.hmScore;
-      let favAbbr = diff >= 0 ? ec.awAbbr : ec.hmAbbr;
-      let favScore = Math.max(ec.awScore, ec.hmScore);
-      let absDiff = Math.abs(diff);
-      let color = absDiff > 20 ? '#34d399' : absDiff > 10 ? '#f59e0b' : '#52525b';
-      let strength = absDiff > 20 ? 'STRONG' : absDiff > 10 ? 'MOD' : absDiff > 5 ? 'SLIGHT' : 'EVEN';
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding:3px 6px;background:rgba(245,158,11,.06);border-radius:4px"><span style="font-size:8px;color:#a1a1aa;letter-spacing:.5px">EDGE</span><span style="font-size:9px;font-weight:700;font-family:monospace;color:'+color+'">'+strength+' '+favAbbr+' '+(favScore>0?'+':'')+favScore.toFixed(1)+'</span></div>';
+      let absDiff = Math.abs(ec.awScore - ec.hmScore);
+      let favAbbr = ec.awScore >= ec.hmScore ? ec.awAbbr : ec.hmAbbr;
+      let color = absDiff > 15 ? '#34d399' : absDiff > 8 ? '#f59e0b' : '#52525b';
+      let strength = absDiff > 15 ? 'STRONG' : absDiff > 8 ? 'MOD' : absDiff > 3 ? 'SLIGHT' : 'EVEN';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding:3px 6px;background:rgba(245,158,11,.06);border-radius:4px"><span style="font-size:8px;color:#a1a1aa;letter-spacing:.5px">EDGE</span><span style="font-size:9px;font-weight:700;font-family:monospace;color:'+color+'">'+(absDiff > 3 ? strength+' '+favAbbr+' Δ'+absDiff.toFixed(1) : 'EVEN Δ'+absDiff.toFixed(1))+'</span></div>';
     }
     // Odds lines preview
     let kd = kalshi[g.gamePk];
