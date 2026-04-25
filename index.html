@@ -96,6 +96,7 @@ let games = [];
 let sel = null;
 let mode = 'list';
 let savant = {};
+let savantPit = {}; // pitcher player_id -> {xfip, xera, pitch_pct_ff, pitch_pct_sl, pitch_pct_cu, pitch_pct_ch, ...}
 let kalshi = {}; // gamePk -> {ml_away, ml_home, spread, ou, markets:[]}
 let picks = JSON.parse(localStorage.getItem('mlb_picks') || '{}'); // gamePk -> {type, side, price, label, date}
 let edgeCache = {}; // gamePk -> { awScore, hmScore, awAbbr, hmAbbr, verdict }
@@ -181,14 +182,14 @@ async function loadOdds() {
 
 // --- Savant CSV loader ---
 async function loadSavant() {
-  // Fetch BOTH leaderboards in parallel
   try {
-    let [r1, r2] = await Promise.all([
+    let [r1, r2, r3] = await Promise.all([
       fetch('https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=2026&position=&team=&min=10&csv=true').catch(()=>null),
+      fetch('https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=pitcher&year=2026&position=&team=&min=10&csv=true').catch(()=>null),
       fetch('https://baseballsavant.mlb.com/leaderboard/statcast?type=batter&year=2026&position=&team=&min=q&csv=true').catch(()=>null)
     ]);
 
-    // Parse expected stats (xBA, xSLG, xwOBA)
+    // Parse batter expected stats (xBA, xSLG, xwOBA)
     if (r1 && r1.ok) {
       let text = await r1.text();
       parseCSV(text, (headers, cols, pid) => {
@@ -199,9 +200,22 @@ async function loadSavant() {
       });
     }
 
-    // Parse statcast (EV, barrel rate)
+    // Parse pitcher expected stats (xFIP, xERA, xwOBA against)
     if (r2 && r2.ok) {
       let text = await r2.text();
+      parseCSV(text, (headers, cols, pid) => {
+        if (!savantPit[pid]) savantPit[pid] = {};
+        savantPit[pid].xwoba = findCol(headers, cols, ['est_woba','xwoba','expected_woba']);
+        savantPit[pid].xera = findCol(headers, cols, ['xera','est_era','expected_era']);
+        // xFIP not always on expected_statistics — try to find it
+        savantPit[pid].xfip = findCol(headers, cols, ['xfip','expected_fip']);
+      });
+      console.log('Savant pitchers (expected):', Object.keys(savantPit).length);
+    }
+
+    // Parse batter statcast (EV, barrel rate)
+    if (r3 && r3.ok) {
+      let text = await r3.text();
       parseCSV(text, (headers, cols, pid) => {
         if (!savant[pid]) savant[pid] = {};
         savant[pid].ev = findCol(headers, cols, ['avg_hit_speed','exit_velocity','avg_exit_velocity','ev','launch_speed']);
@@ -209,8 +223,38 @@ async function loadSavant() {
       });
     }
 
-    console.log('Savant loaded:', Object.keys(savant).length, 'players');
+    console.log('Savant batters:', Object.keys(savant).length);
   } catch(e) { console.warn('Savant error:', e); }
+}
+
+// Also try the statcast pitcher leaderboard for xFIP
+async function loadSavantPitXFIP() {
+  try {
+    let r = await fetch('https://baseballsavant.mlb.com/leaderboard/statcast?type=pitcher&year=2026&position=&team=&min=q&csv=true').catch(()=>null);
+    if (r && r.ok) {
+      let text = await r.text();
+      parseCSV(text, (headers, cols, pid) => {
+        if (!savantPit[pid]) savantPit[pid] = {};
+        let xfip = findCol(headers, cols, ['xfip','expected_fip','xfip_value']);
+        if (xfip) savantPit[pid].xfip = xfip;
+        // Pitch mix percentages
+        savantPit[pid].ff_pct = findCol(headers, cols, ['ff_pct','pitch_pct_ff','fastball_pct','fa_pct']);
+        savantPit[pid].sl_pct = findCol(headers, cols, ['sl_pct','pitch_pct_sl','slider_pct']);
+        savantPit[pid].cu_pct = findCol(headers, cols, ['cu_pct','pitch_pct_cu','curve_pct','cb_pct']);
+        savantPit[pid].ch_pct = findCol(headers, cols, ['ch_pct','pitch_pct_ch','changeup_pct']);
+        savantPit[pid].si_pct = findCol(headers, cols, ['si_pct','pitch_pct_si','sinker_pct']);
+        savantPit[pid].fc_pct = findCol(headers, cols, ['fc_pct','pitch_pct_fc','cutter_pct']);
+      });
+      console.log('Savant pitcher statcast:', Object.keys(savantPit).length);
+    }
+  } catch(e) { console.warn('Savant pitcher statcast error:', e); }
+}
+
+// wRC+ approximation from wOBA (2026 league constants)
+function calcWRCplus(woba) {
+  if (woba == null) return null;
+  let lgWoba = 0.310, scale = 1.15, lgRPA = 0.120;
+  return (((woba - lgWoba) / scale + lgRPA) / lgRPA) * 100;
 }
 
 function parseCSV(text, callback) {
@@ -347,6 +391,7 @@ async function load() {
   if (!hasSavant) {
     updateProgress(1, totalSteps, 'Downloading Savant Statcast data...', 6);
     await loadSavant();
+    await loadSavantPitXFIP();
     updateProgress(2, totalSteps, 'Savant loaded', 6);
   }
 
@@ -377,59 +422,207 @@ async function load() {
   scanAllEdges();
 }
 
-// --- Auto-scan edge scores for all games ---
+// --- Full edge scan for all games (new 8-metric system) ---
 async function scanAllEdges() {
   $('sub').textContent += ' · SCANNING EDGES...';
-  
-  // Fetch all pitcher stats in parallel (2 per game)
-  let pitcherFetches = games.map(async g => {
-    let ap = g.teams.away.probablePitcher;
-    let hp = g.teams.home.probablePitcher;
-    let [apD, hpD] = await Promise.all([
-      ap ? api('/api/v1/people/'+ap.id+'?hydrate=stats(group=[pitching],type=[season],season=2026)') : null,
-      hp ? api('/api/v1/people/'+hp.id+'?hydrate=stats(group=[pitching],type=[season],season=2026)') : null
-    ]);
-    return {
-      gamePk: g.gamePk,
-      awAbbr: g.teams.away.team.abbreviation,
-      hmAbbr: g.teams.home.team.abbreviation,
-      apS: apD?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat || null,
-      hpS: hpD?.people?.[0]?.stats?.[0]?.splits?.[0]?.stat || null,
-      apHand: apD?.people?.[0]?.pitchHand?.code || null,
-      hpHand: hpD?.people?.[0]?.pitchHand?.code || null
+
+  // Venue ID map
+  const VENUE = {
+    'NYY':3313,'NYM':3289,'LAD':22,'SD':2680,'LAA':1,'HOU':2392,'TEX':5325,
+    'SEA':680,'ATH':10,'BOS':3,'TB':12,'TOR':14,'BAL':2,'MIN':3312,
+    'CLE':5,'DET':2394,'CWS':4,'KC':7,'ATL':4705,'PHI':2681,
+    'WSH':3309,'MIA':4169,'CHC':17,'CIN':2602,'MIL':32,'PIT':31,'STL':2889,
+    'SF':2395,'AZ':15,'COL':19
+  };
+
+  // Phase 1: Collect all pitcher IDs
+  let pitcherIds = {};
+  games.forEach(g => {
+    if (g.teams.away.probablePitcher) pitcherIds[g.teams.away.probablePitcher.id] = 1;
+    if (g.teams.home.probablePitcher) pitcherIds[g.teams.home.probablePitcher.id] = 1;
+  });
+  let pitIds = Object.keys(pitcherIds);
+  let teamIds = [...new Set(games.flatMap(g => [g.teams.away.team.id, g.teams.home.team.id]))];
+
+  // Fetch pitcher stats + game logs + team data in parallel
+  let [pitStatResults, pitLogResults, rosterResults, depthResults, seasonResults] = await Promise.all([
+    Promise.all(pitIds.map(id => api('/api/v1/people/'+id+'?hydrate=stats(group=[pitching],type=[season],season=2026)'))),
+    Promise.all(pitIds.map(id => api('/api/v1/people/'+id+'/stats?stats=gameLog&group=pitching&season=2026'))),
+    Promise.all(teamIds.map(id => api('/api/v1/teams/'+id+'/roster?rosterType=active'))),
+    Promise.all(teamIds.map(id => api('/api/v1/teams/'+id+'/roster/depthChart'))),
+    Promise.all(teamIds.map(id => api('/api/v1/teams/'+id+'/stats?stats=season&group=hitting&season=2026')))
+  ]);
+
+  // Build pitcher map
+  let pitMap = {};
+  pitIds.forEach((id, i) => {
+    let p = pitStatResults[i]?.people?.[0];
+    let logs = pitLogResults[i]?.stats?.[0]?.splits || [];
+    let sv = savantPit[id] || {};
+    pitMap[id] = {
+      stat: p?.stats?.[0]?.splits?.[0]?.stat || null,
+      hand: p?.pitchHand?.code || null,
+      gameLogs: logs,
+      xfip: sv.xfip ? +sv.xfip : null,
+      xwoba: sv.xwoba || null,
+      ff_pct: sv.ff_pct, sl_pct: sv.sl_pct, cu_pct: sv.cu_pct, ch_pct: sv.ch_pct
     };
   });
-  
-  let results = await Promise.all(pitcherFetches);
-  
-  // Compute quick edge for each game
-  results.forEach(r => {
-    let g = games.find(g => g.gamePk === r.gamePk);
-    if (!g) return;
+
+  // Build team maps
+  let rosterMap = {}, depthMap = {}, seasonWobaMap = {};
+  teamIds.forEach((id, i) => {
+    rosterMap[id] = (rosterResults[i]?.roster || []).filter(p => p.position?.type !== 'Pitcher').map(p => p.person.id);
+    depthMap[id] = depthResults[i]?.roster || [];
+    seasonWobaMap[id] = calcWOBA(seasonResults[i]?.stats?.[0]?.splits?.[0]?.stat);
+  });
+
+  // Team xwOBA from Savant
+  let teamXwobaMap = {};
+  teamIds.forEach(id => {
+    let pIds = rosterMap[id] || [];
+    let xws = pIds.map(pid => savant[pid]?.xwoba).filter(x => x != null).map(Number);
+    teamXwobaMap[id] = xws.length >= 3 ? xws.reduce((a,b)=>a+b,0)/xws.length : null;
+  });
+
+  // Identify high-leverage bullpen arms per team
+  function getHLArms(teamId) {
+    let depth = depthMap[teamId] || [];
+    let arms = [];
+    depth.forEach(p => {
+      let pos = p.position?.abbreviation || '';
+      if (['CL','SU','RP','MR'].includes(pos) && p.person?.id) arms.push(p.person.id);
+    });
+    return [...new Set(arms)].slice(0, 4);
+  }
+
+  // Fetch bullpen arm stats
+  let allBPArmIds = [...new Set(teamIds.flatMap(id => getHLArms(id)))];
+  let bpStatResults = await Promise.all(allBPArmIds.map(id =>
+    api('/api/v1/people/'+id+'?hydrate=stats(group=[pitching],type=[season],season=2026)')
+  ));
+  let allBPArms = {};
+  allBPArmIds.forEach((id, i) => {
+    let p = bpStatResults[i]?.people?.[0];
+    let st = p?.stats?.[0]?.splits?.[0]?.stat;
+    let sv = savantPit[id] || {};
+    allBPArms[id] = {
+      name: p?.fullName || '?',
+      stat: st, fip: calcFIP(st),
+      xfip: sv.xfip ? +sv.xfip : null,
+      hand: p?.pitchHand?.code || null
+    };
+  });
+
+  // Phase 2: Compute edge for every game
+  function clamp(v, max) { return Math.max(-max, Math.min(max, v)); }
+
+  games.forEach(g => {
     let aw = g.teams.away, hm = g.teams.home;
-    
-    // Get team xwOBA/wOBA from Savant for each lineup
-    // Use boxscore batting order if available, otherwise roster estimate
-    // For quick scan, estimate from any players on this team in Savant data
-    function teamSavantAvg(teamId) {
-      // Find players on this team from savant data
-      // We don't have team IDs in savant, so we'll skip team-level for quick scan
-      return null;
-    }
-    
-    // Compute edge using pitcher quality + pitcher luck + park
+    let apData = aw.probablePitcher ? pitMap[aw.probablePitcher.id] : null;
+    let hpData = hm.probablePitcher ? pitMap[hm.probablePitcher.id] : null;
     let parkF = PARK[hm.team.abbreviation] || 1.00;
-    
-    let awEdge = computeQuickEdge(r.hpS, r.apS, parkF); // away team faces home pitcher
-    let hmEdge = computeQuickEdge(r.apS, r.hpS, parkF); // home team faces away pitcher
-    
-    edgeCache[r.gamePk] = {
+    let venueId = VENUE[hm.team.abbreviation] || null;
+
+    function buildEdge(teamId, oppPitData, oppTeamId) {
+      let score = 0, breakdown = [];
+
+      // 1. Opp Starter xFIP
+      if (oppPitData) {
+        let xfip = oppPitData.xfip;
+        let fip = oppPitData.stat ? calcFIP(oppPitData.stat) : null;
+        let val = xfip || fip;
+        if (val != null) {
+          let pts = clamp((val - 4.20) * 3, 10);
+          score += pts;
+          let q = val < 2.8 ? 'elite arm' : val < 3.5 ? 'strong arm' : val < 4.2 ? 'avg pitcher' : 'hittable pitcher';
+          breakdown.push({ label: 'Opp. Starter xFIP', value: val.toFixed(2)+(xfip?' (Savant)':' (FIP)'), pts: (pts>0?'+':'')+pts.toFixed(1), note: 'facing '+q, color: val > 4.2 ? '#34d399' : val < 3.5 ? '#f87171' : '#a1a1aa' });
+        } else {
+          breakdown.push({ label: 'Opp. Starter xFIP', value: 'N/A', pts: '—', note: 'no data', color: '#52525b' });
+        }
+
+        // 2. Pitcher park history
+        if (venueId && oppPitData.gameLogs?.length) {
+          let vg = oppPitData.gameLogs.filter(gl => gl.venue?.id === venueId);
+          if (vg.length >= 2) {
+            let totIP = vg.reduce((s,g) => s + parseFloat(g.stat?.inningsPitched||0), 0);
+            let totER = vg.reduce((s,g) => s + (g.stat?.earnedRuns||0), 0);
+            let venERA = totIP > 0 ? (totER / totIP * 9) : null;
+            if (venERA != null) {
+              let pts = clamp((venERA - 4.20) * 1.5, 5);
+              score += pts;
+              breakdown.push({ label: 'Pitcher Park Hist.', value: venERA.toFixed(2)+' ERA ('+vg.length+' GS)', pts: (pts>0?'+':'')+pts.toFixed(1), note: venERA > 5 ? 'struggles here' : venERA < 3 ? 'dominant here' : 'avg here', color: venERA > 5 ? '#34d399' : venERA < 3 ? '#f87171' : '#a1a1aa' });
+            } else {
+              breakdown.push({ label: 'Pitcher Park Hist.', value: 'N/A', pts: '—', note: 'no IP at venue', color: '#52525b' });
+            }
+          } else {
+            breakdown.push({ label: 'Pitcher Park Hist.', value: vg.length+' GS', pts: '—', note: 'too few starts', color: '#52525b' });
+          }
+        } else {
+          breakdown.push({ label: 'Pitcher Park Hist.', value: 'N/A', pts: '—', note: 'no venue data', color: '#52525b' });
+        }
+      } else {
+        breakdown.push({ label: 'Opp. Starter xFIP', value: 'TBD', pts: '—', note: 'pitcher TBD', color: '#52525b' });
+        breakdown.push({ label: 'Pitcher Park Hist.', value: 'TBD', pts: '—', note: 'pitcher TBD', color: '#52525b' });
+      }
+
+      // 3. BvP vs Starter (placeholder for main page)
+      breakdown.push({ label: 'BvP vs Starter', value: '—', pts: '—', note: 'drill into game for matchup data', color: '#52525b' });
+
+      // 4. Lineup wRC+
+      let w = seasonWobaMap[teamId];
+      let wrc = calcWRCplus(w);
+      if (wrc != null) {
+        let pts = clamp((wrc - 100) * 0.15, 6);
+        score += pts;
+        let q = wrc > 115 ? 'elite lineup' : wrc > 105 ? 'above avg' : wrc > 95 ? 'avg lineup' : 'below avg';
+        breakdown.push({ label: 'Lineup wRC+', value: Math.round(wrc)+'', pts: (pts>0?'+':'')+pts.toFixed(1), note: q, color: wrc > 105 ? '#34d399' : wrc < 95 ? '#f87171' : '#a1a1aa' });
+      } else {
+        breakdown.push({ label: 'Lineup wRC+', value: 'N/A', pts: '—', note: 'no data', color: '#52525b' });
+      }
+
+      // 5. Lineup xwOBA
+      let xw = teamXwobaMap[teamId];
+      if (xw != null) {
+        let pts = clamp((xw - 0.310) * 40, 6);
+        score += pts;
+        let q = xw > .340 ? 'elite contact' : xw > .320 ? 'above avg' : xw > .300 ? 'avg contact' : 'weak contact';
+        breakdown.push({ label: 'Lineup xwOBA', value: xw.toFixed(3), pts: (pts>0?'+':'')+pts.toFixed(1), note: q, color: xw > .320 ? '#34d399' : xw < .300 ? '#f87171' : '#a1a1aa' });
+      } else {
+        breakdown.push({ label: 'Lineup xwOBA', value: 'N/A', pts: '—', note: 'need Savant data', color: '#52525b' });
+      }
+
+      // 6. Opp Bullpen (high-leverage arms quality)
+      let bpIds = getHLArms(oppTeamId);
+      let bpFips = bpIds.map(id => allBPArms[id]).filter(a => a && (a.xfip || a.fip));
+      if (bpFips.length) {
+        let avgFip = bpFips.reduce((s,a) => s + (a.xfip || a.fip), 0) / bpFips.length;
+        let pts = clamp((avgFip - 3.80) * 2, 5);
+        score += pts;
+        let names = bpFips.map(a => a.name.split(' ').pop()).join(', ');
+        breakdown.push({ label: 'Opp. Bullpen (HL)', value: avgFip.toFixed(2)+' xFIP', pts: (pts>0?'+':'')+pts.toFixed(1), note: (avgFip > 4.2 ? 'weak pen' : avgFip < 3.2 ? 'elite pen' : 'avg pen')+' ('+names+')', color: avgFip > 4.2 ? '#34d399' : avgFip < 3.2 ? '#f87171' : '#a1a1aa' });
+      } else {
+        breakdown.push({ label: 'Opp. Bullpen (HL)', value: 'N/A', pts: '—', note: 'no bullpen data', color: '#52525b' });
+      }
+
+      // 7. Park Factor
+      let parkPts = clamp((parkF - 1.0) * 5, 2);
+      score += parkPts;
+      breakdown.push({ label: 'Park Factor', value: parkF.toFixed(2), pts: (parkPts>0?'+':'')+parkPts.toFixed(1), note: parkF > 1.02 ? 'hitter friendly' : parkF < 0.98 ? 'pitcher friendly' : 'neutral', color: parkF > 1.02 ? '#34d399' : parkF < 0.98 ? '#38bdf8' : '#52525b' });
+
+      return { score, breakdown };
+    }
+
+    let awEdge = buildEdge(aw.team.id, hpData, hm.team.id);
+    let hmEdge = buildEdge(hm.team.id, apData, aw.team.id);
+
+    edgeCache[g.gamePk] = {
       awScore: awEdge.score, hmScore: hmEdge.score,
       awAbbr: aw.team.abbreviation, hmAbbr: hm.team.abbreviation,
-      awBreakdown: awEdge.breakdown, hmBreakdown: hmEdge.breakdown
+      full: true
     };
   });
-  
+
   let svCount = Object.keys(savant).length;
   let kCount = Object.keys(kalshi).length;
   let statusParts = [games.length + ' GAMES'];
@@ -437,46 +630,9 @@ async function scanAllEdges() {
   if (kCount) statusParts.push('ODDS ✓');
   statusParts.push('EDGE ✓');
   $('sub').textContent = statusParts.join(' · ');
-  renderList(); // re-render with edge scores
+  renderList();
 }
 
-// Quick edge: pitcher quality + luck + park (no lineup data needed)
-function computeQuickEdge(oppPitStat, ownPitStat, parkF) {
-  let score = 0;
-  let breakdown = [];
-  function clamp(v, max) { return Math.max(-max, Math.min(max, v)); }
-  
-  // Opponent pitcher absolute quality (FIP-based)
-  // League avg FIP ~4.20. Lower = tougher for batting team.
-  if (oppPitStat) {
-    let fip = calcFIP(oppPitStat);
-    if (fip != null) {
-      let pts = clamp((fip - 4.20) * 3, 10);
-      score += pts;
-      let quality = fip < 3.0 ? 'elite arm' : fip < 3.8 ? 'above avg' : fip < 4.5 ? 'average' : 'below avg arm';
-      breakdown.push({ label: 'Opp. Pitcher Quality', value: fip.toFixed(2)+' FIP', pts: (pts>0?'+':'')+pts.toFixed(1), note: 'facing '+quality, color: pts > 0 ? '#34d399' : '#f87171' });
-      
-      // Luck signal (secondary — capped lower than quality)
-      let era = +oppPitStat.era;
-      if (!isNaN(era)) {
-        let luckPts = clamp((fip - era) * 1.5, 3);
-        score += luckPts;
-        let dir = luckPts > 0 ? 'opp. pitcher ERA unsustainably low' : 'opp. pitcher may pitch better than ERA shows';
-        breakdown.push({ label: 'Opp. Pitcher Luck', value: era.toFixed(2)+' ERA vs '+fip.toFixed(2)+' FIP', pts: (luckPts>0?'+':'')+luckPts.toFixed(1), note: dir, color: luckPts > 0 ? '#34d399' : '#f87171' });
-      }
-    }
-  } else {
-    breakdown.push({ label: 'Opp. Pitcher', value: 'TBD', pts: '—', note: 'no pitcher data', color: '#52525b' });
-  }
-  
-  // Park factor
-  let parkPts = clamp((parkF - 1.0) * 5, 2);
-  score += parkPts;
-  let parkDir = parkF > 1.02 ? 'hitter friendly' : parkF < 0.98 ? 'pitcher friendly' : 'neutral';
-  breakdown.push({ label: 'Park', value: parkF.toFixed(2), pts: (parkPts>0?'+':'')+parkPts.toFixed(1), note: parkDir, color: parkF > 1.02 ? '#34d399' : parkF < 0.98 ? '#38bdf8' : '#52525b' });
-  
-  return { score, breakdown };
-}
 
 function renderList() {
   let html = '';
@@ -517,7 +673,8 @@ function renderList() {
       let favAbbr = ec.awScore >= ec.hmScore ? ec.awAbbr : ec.hmAbbr;
       let color = absDiff > 15 ? '#34d399' : absDiff > 8 ? '#f59e0b' : '#52525b';
       let strength = absDiff > 15 ? 'STRONG' : absDiff > 8 ? 'MOD' : absDiff > 3 ? 'SLIGHT' : 'EVEN';
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding:3px 6px;background:rgba(245,158,11,.06);border-radius:4px"><span style="font-size:8px;color:#a1a1aa;letter-spacing:.5px">EDGE</span><span style="font-size:9px;font-weight:700;font-family:monospace;color:'+color+'">'+(absDiff > 3 ? strength+' '+favAbbr+' Δ'+absDiff.toFixed(1) : 'EVEN Δ'+absDiff.toFixed(1))+'</span></div>';
+      let label = 'EDGE';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding:3px 6px;background:rgba(245,158,11,.06);border-radius:4px"><span style="font-size:8px;color:#a1a1aa;letter-spacing:.5px">'+label+'</span><span style="font-size:9px;font-weight:700;font-family:monospace;color:'+color+'">'+(absDiff > 3 ? strength+' '+favAbbr+' Δ'+absDiff.toFixed(1) : 'EVEN Δ'+absDiff.toFixed(1))+'</span></div>';
     }
     // Odds lines preview
     let kd = kalshi[g.gamePk];
@@ -672,206 +829,185 @@ async function openGame(i) {
     let enrichedHm = allResults.slice(awBat.length);
 
     // ========================================
-    // EDGE SCORE COMPUTATION
+    // EDGE SCORE COMPUTATION (new 8-metric system)
     // ========================================
     updateProgress(completed, totalSteps, 'Computing edge metrics...', 20);
     
     let aW=aw.leagueRecord?.wins||0, aL=aw.leagueRecord?.losses||0;
     let hW=hm.leagueRecord?.wins||0, hL=hm.leagueRecord?.losses||0;
-    let aEra = apS ? +apS.era : null, hEra = hpS ? +hpS.era : null;
-    let aFip = calcFIP(apS), hFip = calcFIP(hpS);
 
-    // --- 1. Team offensive quality + luck ---
-    function teamOffenseMetrics(batters) {
-      let wobs = batters.filter(b => b.woba != null).map(b => b.woba);
-      let xwobs = batters.filter(b => b.xwoba != null).map(b => +b.xwoba);
-      let avgW = wobs.length ? wobs.reduce((a,b) => a+b, 0) / wobs.length : null;
-      let avgX = xwobs.length ? xwobs.reduce((a,b) => a+b, 0) / xwobs.length : null;
-      let gap = (avgX != null && avgW != null) ? avgX - avgW : null;
-      return { woba: avgW, xwoba: avgX, gap };
+    // Venue ID map
+    const VENUE = {
+      'NYY':3313,'NYM':3289,'LAD':22,'SD':2680,'LAA':1,'HOU':2392,'TEX':5325,
+      'SEA':680,'ATH':10,'BOS':3,'TB':12,'TOR':14,'BAL':2,'MIN':3312,
+      'CLE':5,'DET':2394,'CWS':4,'KC':7,'ATL':4705,'PHI':2681,
+      'WSH':3309,'MIA':4169,'CHC':17,'CIN':2602,'MIL':32,'PIT':31,'STL':2889,
+      'SF':2395,'AZ':15,'COL':19
+    };
+    let venueId = VENUE[hm.team.abbreviation] || null;
+
+    // Fetch pitcher game logs for park history
+    let [apLogs, hpLogs] = await Promise.all([
+      ap ? api('/api/v1/people/'+ap.id+'/stats?stats=gameLog&group=pitching&season=2026') : null,
+      hp ? api('/api/v1/people/'+hp.id+'/stats?stats=gameLog&group=pitching&season=2026') : null
+    ]);
+    let apGameLogs = apLogs?.stats?.[0]?.splits || [];
+    let hpGameLogs = hpLogs?.stats?.[0]?.splits || [];
+
+    // Get Savant pitcher data
+    let apSv = ap ? (savantPit[ap.id] || {}) : {};
+    let hpSv = hp ? (savantPit[hp.id] || {}) : {};
+    let apXFIP = apSv.xfip ? +apSv.xfip : calcFIP(apS);
+    let hpXFIP = hpSv.xfip ? +hpSv.xfip : calcFIP(hpS);
+
+    // Fetch opponent bullpen high-leverage arms
+    let [awDepth, hmDepth] = await Promise.all([
+      api('/api/v1/teams/'+aw.team.id+'/roster/depthChart'),
+      api('/api/v1/teams/'+hm.team.id+'/roster/depthChart')
+    ]);
+    
+    function getHLArms(depthData) {
+      let depth = depthData?.roster || [];
+      let arms = [];
+      depth.forEach(p => {
+        let pos = p.position?.abbreviation || '';
+        if (['CL','SU','RP','MR'].includes(pos) && p.person?.id) arms.push(p.person.id);
+      });
+      return [...new Set(arms)].slice(0, 4);
     }
-    let awOff = teamOffenseMetrics(enrichedAw);
-    let hmOff = teamOffenseMetrics(enrichedHm);
+    
+    let hmBPIds = getHLArms(hmDepth); // away team faces home bullpen
+    let awBPIds = getHLArms(awDepth); // home team faces away bullpen
+    
+    // Fetch bullpen arm stats
+    let allBPIds = [...new Set([...hmBPIds, ...awBPIds])];
+    let bpStatResults = await Promise.all(allBPIds.map(id =>
+      api('/api/v1/people/'+id+'?hydrate=stats(group=[pitching],type=[season],season=2026)')
+    ));
+    let bpArmMap = {};
+    allBPIds.forEach((id, i) => {
+      let p = bpStatResults[i]?.people?.[0];
+      let st = p?.stats?.[0]?.splits?.[0]?.stat;
+      let sv = savantPit[id] || {};
+      bpArmMap[id] = { name: p?.fullName||'?', stat: st, fip: calcFIP(st), xfip: sv.xfip?+sv.xfip:null, hand: p?.pitchHand?.code };
+    });
 
-    // --- 2. Opponent pitcher quality + luck ---
-    // Away team faces home pitcher, home team faces away pitcher
-    let awOppFip = hFip, awOppEra = hEra; // away team faces home pitcher
-    let hmOppFip = aFip, hmOppEra = aEra; // home team faces away pitcher
+    // BvP composite: aggregate lineup wOBA vs this pitcher
+    function bvpComposite(batters) {
+      let bvps = batters.filter(b => b.bvpWoba != null && b.bvpAB >= 3);
+      if (!bvps.length) return null;
+      let total = bvps.reduce((s,b) => s + b.bvpWoba * b.bvpAB, 0);
+      let totalAB = bvps.reduce((s,b) => s + b.bvpAB, 0);
+      return { woba: total / totalAB, count: bvps.length, ab: totalAB };
+    }
+    let awBvP = bvpComposite(enrichedAw);
+    let hmBvP = bvpComposite(enrichedHm);
 
-    // --- 3. Platoon advantage ---
-    // Fetch team batting vs LHP and vs RHP
-    let awPlatoon = null, hmPlatoon = null;
-    try {
-      let oppHand = hpHand || 'R'; // hand of pitcher the away team faces
-      let sitCode = oppHand === 'L' ? 'vl' : 'vr';
-      let [awSplitData, hmSplitData] = await Promise.all([
-        api('/api/v1/teams/'+aw.team.id+'/stats?stats=statSplits&group=hitting&season=2026&sitCodes='+sitCode),
-        api('/api/v1/teams/'+hm.team.id+'/stats?stats=statSplits&group=hitting&season=2026&sitCodes='+(apHand==='L'?'vl':'vr'))
-      ]);
-      let awSplitStat = awSplitData?.stats?.[0]?.splits?.[0]?.stat;
-      let hmSplitStat = hmSplitData?.stats?.[0]?.splits?.[0]?.stat;
-      let awSeasonData = await api('/api/v1/teams/'+aw.team.id+'/stats?stats=season&group=hitting&season=2026');
-      let hmSeasonData = await api('/api/v1/teams/'+hm.team.id+'/stats?stats=season&group=hitting&season=2026');
-      let awSeasonStat = awSeasonData?.stats?.[0]?.splits?.[0]?.stat;
-      let hmSeasonStat = hmSeasonData?.stats?.[0]?.splits?.[0]?.stat;
-      let awSplitWoba = calcWOBA(awSplitStat);
-      let hmSplitWoba = calcWOBA(hmSplitStat);
-      let awSeasonWoba = calcWOBA(awSeasonStat);
-      let hmSeasonWoba = calcWOBA(hmSeasonStat);
-      if (awSplitWoba != null && awSeasonWoba != null) awPlatoon = awSplitWoba - awSeasonWoba;
-      if (hmSplitWoba != null && hmSeasonWoba != null) hmPlatoon = hmSplitWoba - hmSeasonWoba;
-    } catch(e) { console.warn('Platoon fetch error:', e); }
-    updateProgress(completed + 2, totalSteps, 'Checking bullpen fatigue & rest...', 20);
-    // --- 4. BvP concentration ---
-    let awBvpCount = enrichedAw.filter(b => b.bvpWoba != null && b.bvpAB >= 3 && b.bvpWoba > .370).length;
-    let hmBvpCount = enrichedHm.filter(b => b.bvpWoba != null && b.bvpAB >= 3 && b.bvpWoba > .370).length;
+    // Lineup xwOBA from individual batters
+    function lineupXwoba(batters) {
+      let xws = batters.filter(b => b.xwoba != null).map(b => +b.xwoba);
+      return xws.length >= 3 ? xws.reduce((a,b)=>a+b,0)/xws.length : null;
+    }
+    function lineupWoba(batters) {
+      let ws = batters.filter(b => b.woba != null).map(b => b.woba);
+      return ws.length ? ws.reduce((a,b)=>a+b,0)/ws.length : null;
+    }
 
-    // --- 5. Park factor ---
-    let parkTeam = hm.team.abbreviation;
-    let parkFactor = PARK[parkTeam] || 1.00;
+    function clamp(v, max) { return Math.max(-max, Math.min(max, v)); }
 
-    // --- 6. Bullpen fatigue + 7. Rest advantage ---
-    let awBullpenFatigue = false, hmBullpenFatigue = false;
-    let awRested = false, hmRested = false;
-    try {
-      let yesterday = new Date(g.gameDate);
-      yesterday.setDate(yesterday.getDate() - 1);
-      let yStr = yesterday.toISOString().slice(0,10);
-      let yData = await api('/api/v1/schedule?sportId=1&date='+yStr+'&hydrate=linescore,team');
-      let yGames = yData?.dates?.[0]?.games || [];
-      
-      let awYesterday = yGames.find(yg => yg.teams.away.team.id === aw.team.id || yg.teams.home.team.id === aw.team.id);
-      let hmYesterday = yGames.find(yg => yg.teams.away.team.id === hm.team.id || yg.teams.home.team.id === hm.team.id);
-      
-      awRested = !awYesterday;
-      hmRested = !hmYesterday;
+    function computeEdge(batters, oppPitXFIP, oppPitLogs, bvpData, oppBPIds, parkF) {
+      let score = 0, breakdown = [];
 
-      // Check bullpen usage from yesterday's boxscore
-      async function checkBullpen(yGame, teamId) {
-        if (!yGame) return false;
-        try {
-          let yFeed = await api('/api/v1.1/game/'+yGame.gamePk+'/feed/live');
-          let yBox = yFeed?.liveData?.boxscore;
-          if (!yBox) return false;
-          let side = yBox.teams.away.team?.id === teamId ? 'away' : 'home';
-          let pIds = yBox.teams[side]?.pitchers || [];
-          let starterId = yBox.teams[side]?.battingOrder ? null : null; // just check all pitchers
-          let highUsage = false;
-          pIds.forEach(pid => {
-            let p = yBox.teams[side].players['ID'+pid];
-            let ps = p?.stats?.pitching;
-            if (ps && !p?.gameStatus?.isOnBench) {
-              let pitches = ps.numberOfPitches || ps.pitchesThrown || 0;
-              let ip = parseFloat(ps.inningsPitched || 0);
-              // Reliever who threw 25+ pitches or 2+ IP
-              if (ip > 0 && ip < 5 && pitches >= 25) highUsage = true;
-            }
-          });
-          return highUsage;
-        } catch(e) { return false; }
-      }
-      [awBullpenFatigue, hmBullpenFatigue] = await Promise.all([
-        checkBullpen(hmYesterday, hm.team.id), // home team's bullpen = opponent's bullpen for away edge
-        checkBullpen(awYesterday, aw.team.id)  // away team's bullpen = opponent's bullpen for home edge
-      ]);
-    } catch(e) { console.warn('Rest/bullpen error:', e); }
-
-    // ========================================
-    // COMPUTE EDGE SCORES (per team)
-    // ========================================
-    function computeEdge(off, oppFip, oppEra, platoon, bvpCount, parkF, oppBullpenFatigue, rested) {
-      let score = 0;
-      let breakdown = [];
-      function clamp(v, max) { return Math.max(-max, Math.min(max, v)); }
-
-      // --- OFFENSE ---
-      // 1. Lineup xwOBA Level (absolute quality, .310 = league avg)
-      if (off.xwoba != null) {
-        let pts = clamp((off.xwoba - 0.310) * 50, 8);
+      // 1. Opp Starter xFIP
+      if (oppPitXFIP != null) {
+        let pts = clamp((oppPitXFIP - 4.20) * 3, 10);
         score += pts;
-        let quality = off.xwoba > .340 ? 'strong offense' : off.xwoba > .320 ? 'above avg offense' : off.xwoba > .300 ? 'avg offense' : 'weak offense';
-        breakdown.push({ label: 'Lineup Quality', value: off.xwoba.toFixed(3)+' xwOBA', pts: (pts>0?'+':'')+pts.toFixed(1), note: quality, color: off.xwoba > .320 ? '#34d399' : off.xwoba < .300 ? '#f87171' : '#a1a1aa' });
-      } else if (off.woba != null) {
-        let pts = clamp((off.woba - 0.310) * 50, 8);
-        score += pts;
-        let quality = off.woba > .340 ? 'strong offense' : off.woba > .320 ? 'above avg offense' : off.woba > .300 ? 'avg offense' : 'weak offense';
-        breakdown.push({ label: 'Lineup Quality', value: off.woba.toFixed(3)+' wOBA', pts: (pts>0?'+':'')+pts.toFixed(1), note: quality+' (no Savant)', color: off.woba > .320 ? '#34d399' : off.woba < .300 ? '#f87171' : '#a1a1aa' });
+        let q = oppPitXFIP < 2.8 ? 'elite arm' : oppPitXFIP < 3.5 ? 'strong arm' : oppPitXFIP < 4.2 ? 'avg pitcher' : 'hittable pitcher';
+        breakdown.push({ label: 'Opp. Starter xFIP', value: oppPitXFIP.toFixed(2), pts: (pts>0?'+':'')+pts.toFixed(1), note: 'facing '+q, color: oppPitXFIP > 4.2 ? '#34d399' : oppPitXFIP < 3.5 ? '#f87171' : '#a1a1aa' });
       } else {
-        breakdown.push({ label: 'Lineup Quality', value: 'N/A', pts: '—', note: 'no lineup data', color: '#52525b' });
+        breakdown.push({ label: 'Opp. Starter xFIP', value: 'TBD', pts: '—', note: 'pitcher TBD', color: '#52525b' });
       }
 
-      // 2. Lineup Luck (xwOBA - wOBA gap — secondary to quality)
-      if (off.gap != null) {
-        let pts = clamp(off.gap * 20, 3);
-        score += pts;
-        let dir = off.gap > .01 ? 'slightly unlucky, may improve' : off.gap < -.01 ? 'slightly lucky, may regress' : 'performing near expected';
-        breakdown.push({ label: 'Lineup Luck', value: (off.gap>0?'+':'')+off.gap.toFixed(3), pts: (pts>0?'+':'')+pts.toFixed(1), note: dir, color: off.gap > .01 ? '#34d399' : off.gap < -.01 ? '#f87171' : '#a1a1aa' });
+      // 2. Pitcher park history
+      if (venueId && oppPitLogs?.length) {
+        let vg = oppPitLogs.filter(gl => gl.venue?.id === venueId);
+        if (vg.length >= 2) {
+          let totIP = vg.reduce((s,g) => s + parseFloat(g.stat?.inningsPitched||0), 0);
+          let totER = vg.reduce((s,g) => s + (g.stat?.earnedRuns||0), 0);
+          let venERA = totIP > 0 ? (totER / totIP * 9) : null;
+          if (venERA != null) {
+            let pts = clamp((venERA - 4.20) * 1.5, 5);
+            score += pts;
+            breakdown.push({ label: 'Pitcher Park Hist.', value: venERA.toFixed(2)+' ERA ('+vg.length+' GS)', pts: (pts>0?'+':'')+pts.toFixed(1), note: venERA > 5 ? 'struggles here' : venERA < 3 ? 'dominant here' : 'avg here', color: venERA > 5 ? '#34d399' : venERA < 3 ? '#f87171' : '#a1a1aa' });
+          } else {
+            breakdown.push({ label: 'Pitcher Park Hist.', value: 'N/A', pts: '—', note: 'no IP at venue', color: '#52525b' });
+          }
+        } else {
+          breakdown.push({ label: 'Pitcher Park Hist.', value: vg.length+' GS', pts: '—', note: 'too few starts', color: '#52525b' });
+        }
       } else {
-        breakdown.push({ label: 'Lineup Luck', value: 'N/A', pts: '—', note: 'need Savant data', color: '#52525b' });
+        breakdown.push({ label: 'Pitcher Park Hist.', value: 'N/A', pts: '—', note: 'no venue data', color: '#52525b' });
       }
 
-      // --- PITCHING (opponent) ---
-      // 3. Opp. Pitcher Quality (FIP-based, 4.20 = avg)
-      if (oppFip != null) {
-        let pts = clamp((oppFip - 4.20) * 3, 10);
+      // 3. BvP vs Starter (weighted composite)
+      if (bvpData) {
+        let pts = clamp((bvpData.woba - 0.320) * 30, 8);
         score += pts;
-        let quality = oppFip < 2.5 ? 'facing ace' : oppFip < 3.5 ? 'facing strong arm' : oppFip < 4.5 ? 'facing avg pitcher' : 'facing weak pitcher';
-        breakdown.push({ label: 'Opp. Pitcher Quality', value: oppFip.toFixed(2)+' FIP', pts: (pts>0?'+':'')+pts.toFixed(1), note: quality, color: oppFip > 4.2 ? '#34d399' : oppFip < 3.5 ? '#f87171' : '#a1a1aa' });
+        let q = bvpData.woba > .380 ? 'lineup owns this pitcher' : bvpData.woba > .340 ? 'favorable matchup' : bvpData.woba < .260 ? 'pitcher dominates lineup' : 'neutral matchup history';
+        breakdown.push({ label: 'BvP vs Starter', value: bvpData.woba.toFixed(3)+' wOBA ('+bvpData.count+'/9, '+bvpData.ab+' AB)', pts: (pts>0?'+':'')+pts.toFixed(1), note: q, color: bvpData.woba > .340 ? '#34d399' : bvpData.woba < .280 ? '#f87171' : '#a1a1aa' });
       } else {
-        breakdown.push({ label: 'Opp. Pitcher Quality', value: 'TBD', pts: '—', note: 'pitcher not announced', color: '#52525b' });
+        breakdown.push({ label: 'BvP vs Starter', value: 'N/A', pts: '—', note: 'no/insufficient matchup history', color: '#52525b' });
       }
 
-      // 4. Opp. Pitcher Luck (FIP - ERA — secondary to quality)
-      // Positive FIP-ERA means pitcher has outperformed skills (lucky) — expect regression = good for batting team
-      // But capped low so it can't override pitcher quality
-      if (oppFip != null && oppEra != null) {
-        let gap = oppFip - oppEra;
-        let pts = clamp(gap * 1.5, 3);
+      // 4. Lineup wRC+
+      let w = lineupWoba(batters);
+      let wrc = calcWRCplus(w);
+      if (wrc != null) {
+        let pts = clamp((wrc - 100) * 0.15, 6);
         score += pts;
-        let dir = gap > 0.5 ? 'opp. pitcher ERA unsustainably low — expect more runs allowed' : gap < -0.5 ? 'opp. pitcher ERA inflated — may pitch better than record shows' : 'ERA and skills aligned';
-        breakdown.push({ label: 'Opp. Pitcher Luck', value: oppEra.toFixed(2)+' ERA vs '+oppFip.toFixed(2)+' FIP', pts: (pts>0?'+':'')+pts.toFixed(1), note: dir, color: gap > 0.5 ? '#34d399' : gap < -0.5 ? '#f87171' : '#a1a1aa' });
+        let q = wrc > 115 ? 'elite lineup' : wrc > 105 ? 'above avg' : wrc > 95 ? 'avg lineup' : 'below avg';
+        breakdown.push({ label: 'Lineup wRC+', value: Math.round(wrc)+'', pts: (pts>0?'+':'')+pts.toFixed(1), note: q, color: wrc > 105 ? '#34d399' : wrc < 95 ? '#f87171' : '#a1a1aa' });
       } else {
-        breakdown.push({ label: 'Opp. Pitcher Luck', value: 'N/A', pts: '—', note: 'pitcher TBD', color: '#52525b' });
+        breakdown.push({ label: 'Lineup wRC+', value: 'N/A', pts: '—', note: 'no data', color: '#52525b' });
       }
 
-      // --- MATCHUP ---
-      // 5. Platoon (weight 20, capped ±5)
-      if (platoon != null) {
-        let pts = clamp(platoon * 20, 5);
+      // 5. Lineup xwOBA
+      let xw = lineupXwoba(batters);
+      if (xw != null) {
+        let pts = clamp((xw - 0.310) * 40, 6);
         score += pts;
-        let dir = platoon > 0 ? 'lineup hits better vs this hand' : 'lineup struggles vs this hand';
-        breakdown.push({ label: 'Platoon', value: (platoon>0?'+':'')+platoon.toFixed(3)+' wOBA', pts: (pts>0?'+':'')+pts.toFixed(1), note: dir, color: platoon > 0 ? '#34d399' : '#f87171' });
+        let q = xw > .340 ? 'elite contact' : xw > .320 ? 'above avg' : xw > .300 ? 'avg contact' : 'weak contact';
+        breakdown.push({ label: 'Lineup xwOBA', value: xw.toFixed(3), pts: (pts>0?'+':'')+pts.toFixed(1), note: q, color: xw > .320 ? '#34d399' : xw < .300 ? '#f87171' : '#a1a1aa' });
       } else {
-        breakdown.push({ label: 'Platoon', value: 'N/A', pts: '—', note: 'need pitcher hand data', color: '#52525b' });
+        breakdown.push({ label: 'Lineup xwOBA', value: 'N/A', pts: '—', note: 'need Savant', color: '#52525b' });
       }
 
-      // 6. BvP concentration (3 per batter, capped +12)
-      let bvpPts = clamp(bvpCount * 3, 12);
-      score += bvpPts;
-      breakdown.push({ label: 'BvP Crushers', value: bvpCount + ' of 9', pts: bvpPts > 0 ? '+'+bvpPts.toFixed(1) : '0.0', note: bvpCount > 0 ? bvpCount+' batters own this pitcher (.370+ career)' : 'no batters with strong history', color: bvpCount > 0 ? '#f59e0b' : '#52525b' });
+      // 6. Opp Bullpen (high-leverage arms quality)
+      let bpFips = oppBPIds.map(id => bpArmMap[id]).filter(a => a && (a.xfip || a.fip));
+      if (bpFips.length) {
+        let avgFip = bpFips.reduce((s,a) => s + (a.xfip || a.fip), 0) / bpFips.length;
+        let pts = clamp((avgFip - 3.80) * 2, 5);
+        score += pts;
+        let names = bpFips.map(a => a.name.split(' ').pop()).join(', ');
+        breakdown.push({ label: 'Opp. Bullpen (HL)', value: avgFip.toFixed(2)+' avg xFIP', pts: (pts>0?'+':'')+pts.toFixed(1), note: (avgFip > 4.2 ? 'weak pen' : avgFip < 3.2 ? 'elite pen' : 'avg pen')+' ('+names+')', color: avgFip > 4.2 ? '#34d399' : avgFip < 3.2 ? '#f87171' : '#a1a1aa' });
+      } else {
+        breakdown.push({ label: 'Opp. Bullpen (HL)', value: 'N/A', pts: '—', note: 'no bullpen data', color: '#52525b' });
+      }
 
-      // --- SITUATIONAL ---
-      // 7. Park factor (weight 5, capped ±2)
+      // 7. Park Factor
       let parkPts = clamp((parkF - 1.0) * 5, 2);
       score += parkPts;
       breakdown.push({ label: 'Park Factor', value: parkF.toFixed(2), pts: (parkPts>0?'+':'')+parkPts.toFixed(1), note: parkF > 1.02 ? 'hitter friendly' : parkF < 0.98 ? 'pitcher friendly' : 'neutral', color: parkF > 1.02 ? '#34d399' : parkF < 0.98 ? '#38bdf8' : '#52525b' });
 
-      // 8. Bullpen fatigue (flat +4)
-      breakdown.push({ label: 'Bullpen Fatigue', value: oppBullpenFatigue ? 'YES' : 'No', pts: oppBullpenFatigue ? '+4.0' : '0.0', note: oppBullpenFatigue ? 'opp. relievers overworked yesterday' : 'opp. bullpen rested', color: oppBullpenFatigue ? '#34d399' : '#52525b' });
-      if (oppBullpenFatigue) score += 4;
-
-      // 9. Rest advantage (flat +2)
-      breakdown.push({ label: 'Rest', value: rested ? 'Off day' : 'Played', pts: rested ? '+2.0' : '0.0', note: rested ? 'fresh legs, full bullpen' : 'played yesterday', color: rested ? '#34d399' : '#52525b' });
-      if (rested) score += 2;
-
       return { score, breakdown };
     }
 
-    let awEdge = computeEdge(awOff, awOppFip, awOppEra, awPlatoon, awBvpCount, parkFactor, awBullpenFatigue, awRested);
-    let hmEdge = computeEdge(hmOff, hmOppFip, hmOppEra, hmPlatoon, hmBvpCount, parkFactor, hmBullpenFatigue, hmRested);
+    let awEdge = computeEdge(enrichedAw, hpXFIP, hpGameLogs, awBvP, hmBPIds, parkFactor);
+    let hmEdge = computeEdge(enrichedHm, apXFIP, apGameLogs, hmBvP, awBPIds, parkFactor);
+
 
     // Cache for homepage display
-    edgeCache[g.gamePk] = { awScore: awEdge.score, hmScore: hmEdge.score, awAbbr: aw.team.abbreviation, hmAbbr: hm.team.abbreviation };
+    edgeCache[g.gamePk] = { awScore: awEdge.score, hmScore: hmEdge.score, awAbbr: aw.team.abbreviation, hmAbbr: hm.team.abbreviation, full: true };
 
     // ========================================
     // RENDER EDGE BANNER
@@ -1014,13 +1150,17 @@ async function openGame(i) {
     html += '</div>';
 
     html += '<details class="leg" style="margin-top:6px"><summary style="cursor:pointer;color:#a1a1aa;font-weight:600">What do these metrics mean? ▾</summary><div style="margin-top:8px;line-height:1.8">';
-    html += '<b style="color:#fafafa">AVG</b> — Batting average. Hits divided by at-bats. League avg ~.250.<br>';
-    html += '<b style="color:#fafafa">OPS</b> — On-base plus slugging. Combines how often a batter reaches base with their power. League avg ~.710. Above .800 is strong, .900+ is elite.<br>';
-    html += '<b style="color:#fafafa">wOBA</b> — Weighted on-base average. The best single measure of offensive value — weights walks, singles, doubles, triples, and HRs by their actual run value. League avg ~.310. Above .340 is good, .370+ is elite.<br>';
-    html += '<b style="color:#c084fc">xwOBA</b> — Expected wOBA from Baseball Savant. Based on exit velocity and launch angle of every batted ball. Strips out luck, defense, and ballpark — shows what a hitter "deserves" to produce. If xwOBA > wOBA, they\'re getting unlucky and due for regression up.<br>';
-    html += '<b style="color:#fafafa">BvP</b> — Batter vs Pitcher. Career wOBA against the specific opposing starter. Shows "—" if fewer than 3 career AB (too small a sample to trust). High BvP = this batter owns this pitcher.<br>';
-    html += '<b style="color:#fafafa">ERA</b> — Earned run average. Runs allowed per 9 innings. League avg ~4.00. Under 3.00 is ace-level.<br>';
-    html += '<b style="color:#fafafa">FIP</b> — Fielding independent pitching. Like ERA but only counts what the pitcher controls: strikeouts, walks, HRs. Better predictor of future performance than ERA. If FIP < ERA, pitcher is due for regression down (unlucky). If FIP > ERA, pitcher has been lucky.<br>';
+    html += '<b style="color:#fafafa">AVG</b> — Batting average. Hits / at-bats. League avg ~.250.<br>';
+    html += '<b style="color:#fafafa">OPS</b> — On-base plus slugging. League avg ~.710. Above .800 strong, .900+ elite.<br>';
+    html += '<b style="color:#fafafa">wOBA</b> — Weighted on-base average. Best single measure of offensive value. League avg ~.310. Above .340 good, .370+ elite.<br>';
+    html += '<b style="color:#c084fc">xwOBA</b> — Expected wOBA (Savant). Based on exit velocity + launch angle. Strips luck/defense. If xwOBA > wOBA, hitter is unlucky.<br>';
+    html += '<b style="color:#fafafa">wRC+</b> — Weighted runs created plus. 100 = league avg. 120+ = elite. Scales wOBA to a per-plate-appearance run value.<br>';
+    html += '<b style="color:#fafafa">BvP</b> — Batter vs Pitcher. Career wOBA against the opposing starter. "—" if fewer than 3 AB.<br>';
+    html += '<b style="color:#fafafa">ERA</b> — Earned run average. Runs allowed per 9 IP. League avg ~4.00. Under 3.00 = ace.<br>';
+    html += '<b style="color:#fafafa">FIP</b> — Fielding independent pitching. Only K, BB, HR. Better predictor than ERA.<br>';
+    html += '<b style="color:#fafafa">xFIP</b> — Expected FIP (Savant). Normalizes HR/flyball rate. Most stable pitcher quality metric. Best predictor of future performance.<br>';
+    html += '<b style="color:#fafafa">Pitcher Park Hist.</b> — Career ERA at this specific ballpark. 2+ starts required. Shows if a pitcher historically struggles or dominates at a venue.<br>';
+    html += '<b style="color:#fafafa">Opp. Bullpen (HL)</b> — Average xFIP of the opponent\'s high-leverage relief arms (closer, setup, specialists). Measures late-game vulnerability.<br>';
     html += '</div></details>';
     $('app').innerHTML = html;
 
