@@ -115,6 +115,13 @@ const PARK = {
   'SD':0.96,'CWS':0.96,'TB':0.95,'NYM':0.95,'SF':0.94,'MIA':0.93,'ATH':0.93,
   'LAD':0.97,'SEA':0.92
 };
+const VENUE = {
+  'NYY':3313,'NYM':3289,'LAD':22,'SD':2680,'LAA':1,'HOU':2392,'TEX':5325,
+  'SEA':680,'ATH':10,'BOS':3,'TB':12,'TOR':14,'BAL':2,'MIN':3312,
+  'CLE':5,'DET':2394,'CWS':4,'KC':7,'ATL':4705,'PHI':2681,
+  'WSH':3309,'MIA':4169,'CHC':17,'CIN':2602,'MIL':32,'PIT':31,'STL':2889,
+  'SF':2395,'AZ':15,'COL':19
+};
 function addPick(gamePk, type, side, price, label) {
   let key = gamePk + '_' + type;
   if (picks[key] && picks[key].side === side) { delete picks[key]; } // toggle off
@@ -425,15 +432,6 @@ async function load() {
 // --- Full edge scan for all games (new 8-metric system) ---
 async function scanAllEdges() {
   $('sub').textContent += ' · SCANNING EDGES...';
-
-  // Venue ID map
-  const VENUE = {
-    'NYY':3313,'NYM':3289,'LAD':22,'SD':2680,'LAA':1,'HOU':2392,'TEX':5325,
-    'SEA':680,'ATH':10,'BOS':3,'TB':12,'TOR':14,'BAL':2,'MIN':3312,
-    'CLE':5,'DET':2394,'CWS':4,'KC':7,'ATL':4705,'PHI':2681,
-    'WSH':3309,'MIA':4169,'CHC':17,'CIN':2602,'MIL':32,'PIT':31,'STL':2889,
-    'SF':2395,'AZ':15,'COL':19
-  };
 
   // Phase 1: Collect all pitcher IDs
   let pitcherIds = {};
@@ -836,14 +834,6 @@ async function openGame(i) {
     let aW=aw.leagueRecord?.wins||0, aL=aw.leagueRecord?.losses||0;
     let hW=hm.leagueRecord?.wins||0, hL=hm.leagueRecord?.losses||0;
 
-    // Venue ID map
-    const VENUE = {
-      'NYY':3313,'NYM':3289,'LAD':22,'SD':2680,'LAA':1,'HOU':2392,'TEX':5325,
-      'SEA':680,'ATH':10,'BOS':3,'TB':12,'TOR':14,'BAL':2,'MIN':3312,
-      'CLE':5,'DET':2394,'CWS':4,'KC':7,'ATL':4705,'PHI':2681,
-      'WSH':3309,'MIA':4169,'CHC':17,'CIN':2602,'MIL':32,'PIT':31,'STL':2889,
-      'SF':2395,'AZ':15,'COL':19
-    };
     let venueId = VENUE[hm.team.abbreviation] || null;
     let parkFactor = PARK[hm.team.abbreviation] || 1.00;
     let [apLogs, hpLogs] = await Promise.all([
@@ -1251,4 +1241,4 @@ load();
 </script>
 
 </body>
-  </html>
+</html>
