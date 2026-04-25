@@ -845,8 +845,7 @@ async function openGame(i) {
       'SF':2395,'AZ':15,'COL':19
     };
     let venueId = VENUE[hm.team.abbreviation] || null;
-
-    // Fetch pitcher game logs for park history
+    let parkFactor = PARK[hm.team.abbreviation] || 1.00;
     let [apLogs, hpLogs] = await Promise.all([
       ap ? api('/api/v1/people/'+ap.id+'/stats?stats=gameLog&group=pitching&season=2026') : null,
       hp ? api('/api/v1/people/'+hp.id+'/stats?stats=gameLog&group=pitching&season=2026') : null
